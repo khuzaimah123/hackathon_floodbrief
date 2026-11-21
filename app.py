@@ -111,12 +111,12 @@ def api_demo_addresses():
 
 @app.get("/api/features")
 def api_features():
-    return jsonify({"summary": summary.enabled()})
+    return jsonify({"summary": summary.available(), "summary_live": summary.enabled()})
 
 
 @app.post("/api/summary")
 def api_summary():
-    if not summary.enabled():
+    if not summary.available():
         return jsonify({"error": "Summary is not configured (no GEMINI_API_KEY)."}), 404
     body = request.get_json(silent=True) or {}
     b, lang = body.get("brief"), body.get("lang", "en")

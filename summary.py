@@ -38,7 +38,22 @@ Summary:
 
 
 def enabled():
+    """True when live Gemini calls are possible (an API key is set)."""
     return bool(os.environ.get("GEMINI_API_KEY"))
+
+
+def has_saved():
+    """True when verified summaries are saved in cache/ (e.g. for the demo addresses)."""
+    try:
+        return any(n.startswith("summary_") and n.endswith(".json")
+                   for n in os.listdir(config.CACHE_DIR))
+    except OSError:
+        return False
+
+
+def available():
+    """Show the summary buttons: live with a key, or saved-only without one (e.g. on Vercel)."""
+    return enabled() or has_saved()
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +195,9 @@ def summarize(brief, lang="en", english_text=None):
     except (OSError, ValueError, KeyError):
         pass
 
+    if not enabled():  # no key (e.g. the public Vercel site): saved summaries only
+        return {"ok": False, "text": UNAVAILABLE,
+                "reason": "No GEMINI_API_KEY; only saved summaries are available."}
     try:
         text, model = _generate(prompt)
     except Exception as e:

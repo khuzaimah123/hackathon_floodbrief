@@ -165,3 +165,33 @@ def test_guardrail_number_parsing():
     src = {"chance": 0.3487, "rain": 8.91, "text": "a 53-year flood"}
     assert summary.unverified_numbers("35% / 34.9% / 8.9 in / 8,9 pulgadas / 53", src) == []
     assert summary.unverified_numbers("about 36% and 9.1 in", src) == ["36", "9.1"]
+
+
+# ---------------------------------------------------------------------------
+# No API key (public Vercel site): saved summaries only, Gemini never called
+# ---------------------------------------------------------------------------
+def test_no_key_serves_saved_summary_only(sample_brief, cache_dir, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+    monkeypatch.setattr(summary, "_generate", lambda prompt: (
+        "Over 30 years the chance of a major flood is about 26% on today's map.", "fake-model"))
+    assert summary.summarize(sample_brief, "en")["ok"] is True  # saved to cache
+
+    monkeypatch.delenv("GEMINI_API_KEY")
+
+    def must_not_call(prompt):
+        raise AssertionError("Gemini called without a key")
+    monkeypatch.setattr(summary, "_generate", must_not_call)
+    assert summary.available() is True
+    r = summary.summarize(sample_brief, "en")
+    assert r["ok"] is True and r["cached"] is True
+
+    other = dict(sample_brief, years=10)  # not saved
+    r = summary.summarize(other, "en")
+    assert r["ok"] is False and r["text"] == "Summary unavailable."
+
+
+def test_buttons_hidden_with_no_key_and_nothing_saved(cache_dir, monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    client = app.app.test_client()
+    assert client.get("/api/features").get_json()["summary"] is False
+    assert client.post("/api/summary", json={"brief": {}}).status_code == 404

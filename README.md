@@ -47,7 +47,11 @@ No AI is used for numbers. Everything in the brief is computed in code.
 ## Optional: Gemini summary + Spanish translation
 
 Put `GEMINI_API_KEY=...` in a `.env` file in this folder (it is git-ignored), or export it.
-With no key, the summary buttons are hidden.
+Each teammate should use their own free key from https://aistudio.google.com/apikey.
+
+With no key (as on the public Vercel site), the app only shows summaries already saved in
+`cache/summary_*.json` (the demo addresses); other addresses show "Summary unavailable." and
+Gemini is never called. If there are no saved summaries either, the buttons are hidden.
 
 - `summary.py` asks Gemini (model list in `config.GEMINI_MODELS`, falls back to the next model if
   one is overloaded) for a 3-sentence summary of the brief JSON, and can translate it to Spanish.
