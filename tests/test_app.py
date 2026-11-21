@@ -195,3 +195,10 @@ def test_buttons_hidden_with_no_key_and_nothing_saved(cache_dir, monkeypatch):
     client = app.app.test_client()
     assert client.get("/api/features").get_json()["summary"] is False
     assert client.post("/api/summary", json={"brief": {}}).status_code == 404
+
+
+def test_summary_cache_key_ignores_float_noise_between_machines():
+    # macOS and Linux (Vercel) math can differ in the 16th digit; saved summaries must still match
+    mac = {"odds": {"p_start": 0.010000000000000005, "chance": 35.0}}
+    linux = {"odds": {"p_start": 0.010000000000000004, "chance": 35}}
+    assert summary._cache_path(mac, "en", None) == summary._cache_path(linux, "en", None)

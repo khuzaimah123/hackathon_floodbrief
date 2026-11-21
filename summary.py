@@ -134,9 +134,14 @@ def model_payload(brief):
 
 
 def _canon(o):
-    """JSON that hashes the same after a browser round trip (JS turns 35.0 into 35)."""
-    if isinstance(o, float) and o.is_integer():
-        return int(o)
+    """
+    JSON that hashes the same everywhere: after a browser round trip (JS turns 35.0 into 35)
+    and on other machines (Linux vs macOS math can differ in the 16th digit), so floats are
+    rounded to 10 significant digits first.
+    """
+    if isinstance(o, float):
+        o = float(f"{o:.10g}")
+        return int(o) if o.is_integer() else o
     if isinstance(o, dict):
         return {k: _canon(v) for k, v in o.items()}
     if isinstance(o, list):
