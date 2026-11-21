@@ -1,9 +1,10 @@
 """
 Optional plain-English summary (and Spanish translation) of a brief, written by Gemini.
 
-Guardrail: every number in the model's output must appear in the brief JSON it was
-given (after rounding). If any number doesn't, the output is thrown away and the user
-sees "Summary unavailable." The model never adds numbers to the brief.
+Guardrails (any failure -> the output is thrown away and the user sees "Summary unavailable."):
+1. Every number in the model's output must appear in the brief it was given (after rounding).
+2. Every number must carry the same measured/modeled/assumed label it has in the brief,
+   written as [[26%|modeled]], and no number may appear without a label.
 """
 import hashlib
 import json
@@ -15,13 +16,17 @@ import config
 
 UNAVAILABLE = "Summary unavailable."
 NUM_RE = re.compile(r"\d+(?:[.,]\d+)*")
+TAG_RE = re.compile(r"\[\[([^\[\]|]+)\|(measured|modeled|assumed)\]\]")
 
 PROMPT_EN = """You are helping a volunteer member of a local zoning board who is not a flood expert.
 Write a 3-sentence plain-English summary of the flood brief below.
 
+Every number in the brief is tagged with how we know it, like [[26%|modeled]] or [[9 ft|measured]].
 Rules:
-- Use only numbers that appear in the JSON. Do not calculate, combine or estimate new numbers.
-- Write every number with digits (for example 35%, not "thirty-five percent").
+- Use only numbers that appear inside these tags. Do not calculate, combine or estimate new numbers.
+- Every number you write must keep its tag exactly as in the brief, for example "about [[35%|modeled]]".
+- Never write a digit outside a tag. Refer to the site by its town, not its street address.
+- Write numbers with digits, never as words.
 - Plain text only: no markdown, no bullet points, no headings.
 - Reply with only the 3 sentences, nothing before or after them.
 
@@ -29,8 +34,10 @@ Flood brief JSON:
 {payload}"""
 
 PROMPT_ES = """Translate this flood-risk summary into clear, plain Spanish for a volunteer zoning
-board member. Keep every number exactly as written, with digits and a period for decimals.
-Do not add, remove or change any numbers. Plain text only, no markdown.
+board member. Keep every [[...|label]] tag: you may translate the words inside a tag, but keep
+its number exactly (digits, period for decimals) and keep the label word (measured, modeled or
+assumed) in English. Never write a digit outside a tag. Do not add, remove or change any numbers.
+Plain text only, no markdown.
 Reply with only the translation, nothing before or after it.
 
 Summary:
@@ -104,6 +111,45 @@ def allowed_numbers(obj):
     return vals
 
 
+def _num_key(text):
+    """The numbers in a tag's text, e.g. '1 in 53' -> (1.0, 53.0); None if unreadable."""
+    key = []
+    for tok in numbers_in(text):
+        readings = _readings(tok)
+        if not readings:
+            return None
+        key.append(readings[0][0])
+    return tuple(key)
+
+
+def label_problems(text, source):
+    """
+    Labels in `text` that don't match the brief: a [[number|label]] pair the brief doesn't
+    have, or a number with no label. Digits from the site address are allowed. [] = passes.
+    """
+    allowed, address = set(), set()
+
+    def walk(o):
+        if isinstance(o, str):
+            allowed.update((_num_key(t), k) for t, k in TAG_RE.findall(o))
+        elif isinstance(o, dict):
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    walk(source)
+    address.update(numbers_in(str((source.get("site") or {}).get("address", ""))))
+    problems = []
+    for t, k in TAG_RE.findall(text):
+        key = _num_key(t)
+        if not key or (key, k) not in allowed:
+            problems.append(f"[[{t}|{k}]]")
+    problems += [f"unlabeled {tok}" for tok in numbers_in(TAG_RE.sub(" ", text)) if tok not in address]
+    return problems
+
+
 def _matches(value, decimals, allowed):
     for v in allowed:
         cands = [v, v * 100] if 0 < v <= 1 else [v]  # probabilities may be written as percents
@@ -129,8 +175,11 @@ def unverified_numbers(text, source):
 # Gemini call (with model fallback) and a cache of verified summaries
 # ---------------------------------------------------------------------------
 def model_payload(brief):
-    """What the model sees: the brief minus app status messages (warnings)."""
-    return {k: v for k, v in brief.items() if k != "warnings"}
+    """What the model sees: the brief's labeled sentences only (no raw, unlabeled numbers)."""
+    site, today = brief.get("site") or {}, brief.get("today") or {}
+    return {"site": {"address": site.get("matched_address"), "county": site.get("county")},
+            "flood_zone": today.get("zone"), "inside_floodplain": today.get("in_sfha"),
+            "headline": brief.get("headline", []), "questions": brief.get("questions", [])}
 
 
 def _canon(o):
@@ -212,6 +261,10 @@ def summarize(brief, lang="en", english_text=None):
     if bad:
         return {"ok": False, "text": UNAVAILABLE, "model": model,
                 "reason": f"Discarded: numbers not in the brief: {', '.join(bad)}"}
+    bad = label_problems(text, payload)
+    if bad:
+        return {"ok": False, "text": UNAVAILABLE, "model": model,
+                "reason": f"Discarded: labels missing or not matching the brief: {', '.join(bad)}"}
     try:
         os.makedirs(config.CACHE_DIR, exist_ok=True)
         with open(path + ".tmp", "w") as f:

@@ -48,6 +48,16 @@
   .summary-actions button { padding:5px 12px; font-size:13px; }
   .summary-text p { margin:0 0 8px; }
   .badge { display:inline-block; font-size:11px; font-weight:600; color:#1d6b3a; background:#e8f5ec; border:1px solid #b9dfc6; border-radius:999px; padding:1px 8px; margin-left:6px; vertical-align:middle; }
+  /* Number labels: every number is measured (●), modeled (▲) or assumed (◆) */
+  :root { --measured:#2e7d4f; --modeled:#0b5cad; --assumed:#a15c00; }
+  .tg { white-space:nowrap; }
+  .mk { display:inline-block; width:7px; height:7px; margin:0 1px 0 3px; vertical-align:0.45em;
+        -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .k-measured .mk { background:var(--measured); border-radius:50%; }
+  .k-modeled .mk { background:var(--modeled); width:8px; clip-path:polygon(50% 0, 100% 100%, 0 100%); }
+  .k-assumed .mk { background:var(--assumed); transform:rotate(45deg) scale(0.9); }
+  .legend { margin:10px 0 0; font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:4px 14px; }
+  .legend b { color:var(--ink); font-weight:600; }
   .notes { font-size:12px; color:var(--muted); }
   .notes p { margin:0 0 5px; }
   @media (max-width:700px) { form { grid-template-columns:1fr 1fr; } .facts { grid-template-columns:1fr 1fr; } }
@@ -89,6 +99,22 @@ const $ = (id) => document.getElementById(id);
 const pct = (x) => (x > 0 && x < 0.005) ? "<1%" : Math.round(x * 100) + "%";
 const nYears = (n) => n === 1 ? "1 year" : n + " years";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// Every number shown is labeled measured / modeled / assumed (see the legend on the brief).
+const KINDS = {  // marker shapes: measured = green circle, modeled = blue triangle, assumed = orange diamond
+  measured: ["Measured", "taken from FEMA, USGS or NOAA data"],
+  modeled:  ["Modeled", "calculated by this tool"],
+  assumed:  ["Assumed", "a chosen time span, floor height, scenario or standard"],
+};
+const T = (text, kind) => `<span class="tg k-${kind}" title="${KINDS[kind][0]}: ${KINDS[kind][1]}">${esc(text)}<i class="mk" aria-label="(${kind})"></i></span>`;
+const TAG = /\[\[([^\[\]|]+)\|(measured|modeled|assumed)\]\]/g;
+function tagged(s) {  // "about [[26%|modeled]]" -> about 26%▲ (escaped, labeled)
+  s = String(s ?? ""); let out = "", last = 0;
+  for (const m of s.matchAll(TAG)) { out += esc(s.slice(last, m.index)) + T(m[1], m[2]); last = m.index + m[0].length; }
+  return out + esc(s.slice(last));
+}
+const legend = () => `<div class="legend">Every number is labeled: ${Object.entries(KINDS).map(([k, [name, what]]) =>
+  `<span class="k-${k}"><b>${name}</b><i class="mk"></i> ${what}</span>`).join("")}</div>`;
 
 $("f").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -138,7 +164,7 @@ async function getSummary(lang) {
   $("summary-sec").classList.toggle("sum-empty", !s.ok);
   const label = lang === "es" ? "Resumen en español" : "Plain-English summary";
   out.innerHTML = s.ok
-    ? `<p><b>${label}</b><span class="badge" title="Every number was checked against the brief">✓ numbers verified</span></p><p>${esc(s.text)}</p>`
+    ? `<p><b>${label}</b><span class="badge" title="Every number was checked against the brief">✓ numbers verified</span></p><p>${tagged(s.text)}</p>`
     : `<p class="meta">${esc(s.text || "Summary unavailable.")}</p>`;
   if (!s.ok && s.reason) console.warn("Summary:", s.reason);
   en.disabled = false; es.disabled = !lastEnglish;
@@ -155,40 +181,43 @@ function render(b) {
   let html = `
     <div class="eyebrow">Flood brief${hearing ? " · " + esc(hearing) : ""}</div>
     <div class="title">${esc(b.site.matched_address)}</div>
-    <div class="meta">${b.site.county ? esc(b.site.county) + " County · " : ""}${b.site.lat.toFixed(4)}, ${b.site.lon.toFixed(4)} ·
-      ${b.years}-year outlook (${b.start_year}–${b.end_year})${b.freeboard_applied ? " · floor " + b.freeboard_ft + " ft above BFE" : ""}</div>
-    ${b.warnings.length ? `<div class="banner">${b.warnings.map(esc).join("<br>")}</div>` : ""}
+    <div class="meta">${b.site.county ? esc(b.site.county) + " County · " : ""}${T(b.site.lat.toFixed(4) + ", " + b.site.lon.toFixed(4), "measured")} ·
+      ${T(b.years + "-year", "assumed")} outlook (${T(b.start_year + "–" + b.end_year, "assumed")})${b.freeboard_applied ? " · floor " + T(b.freeboard_ft + " ft", "assumed") + " above BFE" : ""}</div>
+    ${legend()}
+    ${b.warnings.length ? `<div class="banner">${b.warnings.map(tagged).join("<br>")}</div>` : ""}
 
-    <section><h2>Bottom line</h2><div class="headline">${b.headline.map(h => `<p>${esc(h)}</p>`).join("")}</div></section>
+    <section><h2>Bottom line</h2><div class="headline">${b.headline.map(h => `<p>${tagged(h)}</p>`).join("")}</div></section>
 
     <section><h2>Today</h2><div class="facts">
       <div class="fact"><div class="k">FEMA flood zone</div><div class="v">${esc(t.zone || "—")}</div></div>
-      <div class="fact"><div class="k">Base flood elevation</div><div class="v">${t.bfe_ft != null ? t.bfe_ft + " ft" : "—"}</div></div>
-      <div class="fact"><div class="k">Ground elevation</div><div class="v">${t.ground_ft != null ? t.ground_ft + " ft" : "—"}</div></div>
-      <div class="fact"><div class="k">Ground vs. flood level</div><div class="v">${t.ground_below_bfe_ft != null ? (t.ground_below_bfe_ft > 0 ? t.ground_below_bfe_ft + " ft below" : Math.abs(t.ground_below_bfe_ft) + " ft above") : "—"}</div></div>
-    </div><p class="meta" style="margin-top:8px">${esc(zoneLabel)}. ${t.in_sfha ? "Inside the 1% annual-chance floodplain (Special Flood Hazard Area)." : "Outside the 1% annual-chance floodplain."}</p></section>`;
+      <div class="fact"><div class="k">Base flood elevation</div><div class="v">${t.bfe_ft != null ? T(t.bfe_ft + " ft", "measured") : "—"}</div></div>
+      <div class="fact"><div class="k">Ground elevation</div><div class="v">${t.ground_ft != null ? T(t.ground_ft + " ft", "measured") : "—"}</div></div>
+      <div class="fact"><div class="k">Ground vs. flood level</div><div class="v">${t.ground_below_bfe_ft != null ? (t.ground_below_bfe_ft > 0 ? T(t.ground_below_bfe_ft + " ft", "measured") + " below" : T(Math.abs(t.ground_below_bfe_ft) + " ft", "measured") + " above") : "—"}</div></div>
+    </div><p class="meta" style="margin-top:8px">${esc(zoneLabel)}. ${t.in_sfha ? "Inside the " + T("1%", "assumed") + " annual-chance floodplain (Special Flood Hazard Area)." : "Outside the " + T("1%", "assumed") + " annual-chance floodplain."}</p></section>`;
 
   if (o) {
-    const rows = [["Today's FEMA map (climate held fixed)", o.today_map, false, o.p_today]];
+    // Today's row: the 1-in-100 anchor is an assumption; with a raised floor it's modeled.
+    const rows = [["Today's FEMA map (climate held fixed)", o.today_map, false, o.p_today, b.freeboard_applied ? "modeled" : "assumed"]];
     const names = { low: "Sea-level rise: low", central: "Sea-level rise: central", high: "Sea-level rise: high" };
-    for (const k of ["low", "central", "high"]) if (o.scenarios[k]) rows.push([names[k], o.scenarios[k].chance, true, o.scenarios[k].p_end]);
-    html += `<section><h2>Chance of at least one major flood in ${nYears(b.years)}</h2><table>
-      <tr><th>Assumption</th><th></th><th>Chance</th><th>Odds in ${b.end_year}</th></tr>
-      ${rows.map(([n, c, warm, pEnd]) => `<tr><td>${n}</td><td>${bar(c, warm)}</td><td class="num">${pct(c)}</td>
-        <td class="num">1 in ${Math.round(1 / pEnd)} per year</td></tr>`).join("")}
+    for (const k of ["low", "central", "high"]) if (o.scenarios[k]) rows.push([names[k], o.scenarios[k].chance, true, o.scenarios[k].p_end, "modeled"]);
+    html += `<section><h2>Chance of at least one major flood in ${T(nYears(b.years), "assumed")}</h2><table>
+      <tr><th>Assumption</th><th></th><th>Chance</th><th>Odds in ${T(b.end_year, "assumed")}</th></tr>
+      ${rows.map(([n, c, warm, pEnd, kind]) => `<tr><td>${n}</td><td>${bar(c, warm)}</td><td class="num">${T(pct(c), "modeled")}</td>
+        <td class="num">${T("1 in " + Math.round(1 / pEnd), kind)} per year</td></tr>`).join("")}
     </table></section>`;
     if (o.freeboard.length) {
       html += `<section><h2>What raising the floor buys (central sea-level rise)</h2><table>
-        <tr><th>Lowest floor</th><th></th><th>${b.years}-yr chance</th></tr>
-        ${o.freeboard.map(x => `<tr><td>${x.feet === 0 ? "At base flood elevation" : x.feet + " ft above"}</td>
-          <td>${bar(x.chance, true)}</td><td class="num">${pct(x.chance)}</td></tr>`).join("")}
+        <tr><th>Lowest floor</th><th></th><th>${T(b.years + "-yr", "assumed")} chance</th></tr>
+        ${o.freeboard.map(x => `<tr><td>${x.feet === 0 ? "At base flood elevation" : T(x.feet + " ft", "assumed") + " above"}</td>
+          <td>${bar(x.chance, true)}</td><td class="num">${T(pct(x.chance), "modeled")}</td></tr>`).join("")}
       </table></section>`;
     }
   }
 
   if (rain) {
-    html += `<section><h2>Heavy rain</h2><p>Today's 100-year, 24-hour storm here: <b>${rain.today_100yr_in.toFixed(1)} in</b> (NOAA Atlas 14).`;
-    if (rain.future_100yr_in) html += ` NJDEP's design factor for ${esc(rain.county)} County raises the 100-year storm by <b>${rain.pct_increase}%</b> to about <b>${rain.future_100yr_in} in</b>${rain.today_storm_future_return_period ? `, so today's 100-year rainfall becomes roughly a <b>${rain.today_storm_future_return_period}-year</b> storm` : ""}.`;
+    const y100 = T("100-year", "assumed");
+    html += `<section><h2>Heavy rain</h2><p>Today's ${y100}, ${T("24-hour", "assumed")} storm here: <b>${T(rain.today_100yr_in.toFixed(1) + " in", "measured")}</b> (NOAA Atlas 14).`;
+    if (rain.future_100yr_in) html += ` NJDEP's design factor for ${esc(rain.county)} County raises the ${y100} storm by <b>${T(rain.pct_increase + "%", "assumed")}</b> to about <b>${T(rain.future_100yr_in + " in", "modeled")}</b>${rain.today_storm_future_return_period ? `, so today's ${y100} rainfall becomes roughly a <b>${T(rain.today_storm_future_return_period + "-year", "modeled")}</b> storm` : ""}.`;
     html += `</p></section>`;
   }
 
@@ -200,11 +229,11 @@ function render(b) {
       </div><div class="summary-text" id="summary-text"></div></section>`;
   }
 
-  html += `<section><h2>Questions to ask the developer</h2><ol>${b.questions.map(q => `<li>${esc(q)}</li>`).join("")}</ol></section>
+  html += `<section><h2>Questions to ask the developer</h2><ol>${b.questions.map(q => `<li>${tagged(q)}</li>`).join("")}</ol></section>
     <section class="notes"><h2>Method &amp; sources</h2>
       <p>Chance of at least one flood = 1 − (1 − p₁)(1 − p₂)…(1 − pₙ), with each year's chance p computed separately.</p>
-      ${b.coastal && b.gauge.name ? `<p>Coastal odds use NOAA's flood-frequency curve for the ${esc(b.gauge.name)} tide gauge (${b.gauge.miles} mi away), anchored so FEMA's base flood elevation has a 1% chance today, then shifted by NJ sea-level rise projections (Rutgers STAP 2025: 0.9–1.7 ft by 2050, 2.2–3.8 ft by 2100 vs. 2005; "central" is the midpoint).</p>` : ""}
-      <p>Sources: FEMA National Flood Hazard Layer; USGS 3DEP elevation; NOAA Atlas 14; NOAA CO-OPS Extreme Water Levels; NJDEP future precipitation change factors (N.J.A.C. 7:8, 2050–2099, moderate emissions).</p>
+      ${b.coastal && b.gauge.name ? `<p>Coastal odds use NOAA's flood-frequency curve for the ${esc(b.gauge.name)} tide gauge (${T(b.gauge.miles + " mi", "measured")} away), anchored so FEMA's base flood elevation has a ${T("1%", "assumed")} chance today, then shifted by NJ sea-level rise projections (Rutgers STAP 2025: ${T("0.9–1.7 ft by 2050", "assumed")}, ${T("2.2–3.8 ft by 2100", "assumed")} vs. ${T("2005", "assumed")}; "central" is the midpoint).</p>` : ""}
+      <p>Sources: FEMA National Flood Hazard Layer; USGS 3DEP elevation; NOAA Atlas 14; NOAA CO-OPS Extreme Water Levels; NJDEP future precipitation change factors (N.J.A.C. 7:8, ${T("2050–2099", "assumed")}, moderate emissions).</p>
       <p>These are planning estimates, not engineering certifications. Map elevations are often in NAVD88; ground elevation is approximate.</p>
     </section>`;
   $("page").innerHTML = html;

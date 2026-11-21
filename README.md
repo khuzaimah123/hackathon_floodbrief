@@ -44,6 +44,23 @@ python3 -m pytest tests   # tests for the math
 
 No AI is used for numbers. Everything in the brief is computed in code.
 
+## Every number is labeled
+
+Each number in the brief (and in the Gemini summary) carries a marker, explained in a legend
+at the top of the brief:
+
+| Label | Marker | Meaning | Examples |
+|---|---|---|---|
+| **Measured** | green circle | Taken directly from FEMA, USGS or NOAA data, not calculated by this tool | ground elevation, base flood elevation, today's 100-year rainfall depth, distance to the tide gauge |
+| **Modeled** | blue triangle | Calculated by this tool (`risk.py`, `brief.py`) | every flood chance (26%, 35%), "1 in 53 per year", "53-year flood", future rainfall depth and return period |
+| **Assumed** | orange diamond | A chosen time span, floor height, scenario or standard definition | the 30-year span and 2026–2055, floor heights, sea-level-rise scenarios, NJDEP's rainfall factor, "100-year flood = 1% per year" |
+
+In code, numbers in sentences are written as `[[26%|modeled]]` (`brief.tag()`); the page turns
+these into markers. Not labeled, because they are names rather than quantities: the street
+address and ZIP, citations like "NOAA Atlas 14" and "N.J.A.C. 7:8", the probability formula,
+and the date/time in status messages. Gemini summaries must copy each number's label exactly,
+or they are discarded.
+
 ## Optional: Gemini summary + Spanish translation
 
 Put `GEMINI_API_KEY=...` in a `.env` file in this folder (it is git-ignored), or export it.

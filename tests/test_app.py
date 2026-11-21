@@ -101,15 +101,18 @@ def test_headline_compares_f_to_f_plus_2(sample_site):
     fb = {x["feet"]: x["chance"] for x in b["odds"]["freeboard"]}
     assert sorted(fb) == [0, 2, 3, 4, 5]  # f..f+3 plus the 0 ft row
     assert (f"Raising the lowest floor from 2 ft to 4 ft above the base flood elevation cuts "
-            f"the 30-year odds from {brief.pct(fb[2])} to {brief.pct(fb[4])}.") in b["headline"]
+            f"the 30-year odds from {brief.pct(fb[2])} to {brief.pct(fb[4])}.") in map(brief.plain, b["headline"])
     assert any(f"At 2 ft above the base flood elevation the 30-year odds are about {brief.pct(fb[2])}"
-               in q for q in b["questions"])
+               in brief.plain(q) for q in b["questions"])
+    # and each number carries the right label
+    assert ("[[2 ft|assumed]] to [[4 ft|assumed]]" in b["headline"][2]
+            and f"[[{brief.pct(fb[4])}|modeled]]" in b["headline"][2])
     assert b["freeboard_applied"] is True
 
 
 def test_one_year_grammar(sample_site):
     b = brief.build_brief(sample_site, years=1, start_year=2026)
-    assert b["headline"][0].startswith("Over 1 year,")
+    assert brief.plain(b["headline"][0]).startswith("Over 1 year,")
 
 
 def test_curve_without_one_percent_falls_back(sample_site):
@@ -117,8 +120,9 @@ def test_curve_without_one_percent_falls_back(sample_site):
     site["gauge"]["curve"] = [c for c in site["gauge"]["curve"] if c[0] > 0.02]
     b = brief.build_brief(site, years=30, freeboard_ft=2.0, start_year=2026)  # no ValueError
     assert b["odds"]["scenarios"] == {} and b["odds"]["freeboard"] == []
-    assert b["headline"][0].startswith("Over 30 years, the chance of at least one major flood is about 26%")
-    assert any("doesn't reach the 1% level" in w for w in b["warnings"])
+    assert brief.plain(b["headline"][0]).startswith(
+        "Over 30 years, the chance of at least one major flood is about 26%")
+    assert any("doesn't reach the 1% level" in brief.plain(w) for w in b["warnings"])
     assert "Floor height only changes the odds for coastal sites." in b["warnings"]
 
 
@@ -140,11 +144,16 @@ def sample_brief(sample_site):
     return brief.build_brief(sample_site, years=30, start_year=2026)
 
 
+FAITHFUL = ("Over [[30 years|assumed]] the chance of a major flood is about [[26%|modeled]] on "
+            "today's map and [[35%|modeled]] with sea-level rise. Raising the floor [[2 ft|assumed]] "
+            "cuts that to [[8%|modeled]]. The [[100-year|assumed]] storm is [[9.2 in|measured]].")
+
+
 def test_guardrail_rejects_invented_number(sample_brief, cache_dir, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test")
     monkeypatch.setattr(summary, "_generate", lambda prompt: (
-        "Over 30 years the chance of a major flood is about 42%. That is high. Ask questions.",
-        "fake-model"))
+        "Over [[30 years|assumed]] the chance of a major flood is about [[42%|modeled]]. "
+        "That is high. Ask questions.", "fake-model"))
     r = summary.summarize(sample_brief, "en")
     assert r["ok"] is False and r["text"] == "Summary unavailable."
     assert "42" in r["reason"]
@@ -153,12 +162,21 @@ def test_guardrail_rejects_invented_number(sample_brief, cache_dir, monkeypatch)
 
 def test_guardrail_passes_faithful_summary(sample_brief, cache_dir, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test")
-    monkeypatch.setattr(summary, "_generate", lambda prompt: (
-        "Over 30 years the chance of a major flood is about 26% on today's map and 35% with "
-        "sea-level rise. Raising the floor 2 ft cuts that to 8%. The 100-year storm is 9.2 in.",
-        "fake-model"))
+    monkeypatch.setattr(summary, "_generate", lambda prompt: (FAITHFUL, "fake-model"))
     r = summary.summarize(sample_brief, "en")
     assert r["ok"] is True and r["verified"] is True
+
+
+@pytest.mark.parametrize("text, why", [
+    (FAITHFUL.replace("[[26%|modeled]]", "26%"), "unlabeled 26"),
+    (FAITHFUL.replace("[[9.2 in|measured]]", "[[9.2 in|modeled]]"), "[[9.2 in|modeled]]"),
+    (FAITHFUL.replace("[[30 years|assumed]]", "[[30 years|measured]]"), "[[30 years|measured]]"),
+])
+def test_guardrail_rejects_missing_or_wrong_labels(sample_brief, cache_dir, monkeypatch, text, why):
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+    monkeypatch.setattr(summary, "_generate", lambda prompt: (text, "fake-model"))
+    r = summary.summarize(sample_brief, "en")
+    assert r["ok"] is False and why in r["reason"]
 
 
 def test_guardrail_number_parsing():
@@ -172,8 +190,7 @@ def test_guardrail_number_parsing():
 # ---------------------------------------------------------------------------
 def test_no_key_serves_saved_summary_only(sample_brief, cache_dir, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test")
-    monkeypatch.setattr(summary, "_generate", lambda prompt: (
-        "Over 30 years the chance of a major flood is about 26% on today's map.", "fake-model"))
+    monkeypatch.setattr(summary, "_generate", lambda prompt: (FAITHFUL, "fake-model"))
     assert summary.summarize(sample_brief, "en")["ok"] is True  # saved to cache
 
     monkeypatch.delenv("GEMINI_API_KEY")
@@ -185,7 +202,7 @@ def test_no_key_serves_saved_summary_only(sample_brief, cache_dir, monkeypatch):
     r = summary.summarize(sample_brief, "en")
     assert r["ok"] is True and r["cached"] is True
 
-    other = dict(sample_brief, years=10)  # not saved
+    other = dict(sample_brief, headline=sample_brief["headline"][:1])  # a different brief, not saved
     r = summary.summarize(other, "en")
     assert r["ok"] is False and r["text"] == "Summary unavailable."
 
@@ -202,3 +219,23 @@ def test_summary_cache_key_ignores_float_noise_between_machines():
     mac = {"odds": {"p_start": 0.010000000000000005, "chance": 35.0}}
     linux = {"odds": {"p_start": 0.010000000000000004, "chance": 35}}
     assert summary._cache_path(mac, "en", None) == summary._cache_path(linux, "en", None)
+
+
+# ---------------------------------------------------------------------------
+# Every number in the brief's text is labeled measured / modeled / assumed
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("kw", [{}, {"freeboard_ft": 2.0}, {"years": 1}])
+def test_every_number_in_brief_text_is_labeled(sample_site, kw):
+    b = brief.build_brief(sample_site, start_year=2026, **kw)
+    for text in b["headline"] + b["questions"] + b["warnings"]:
+        assert not any(ch.isdigit() for ch in brief.TAG_RE.sub("", text)), text
+
+
+def test_inland_brief_text_is_labeled(sample_site):
+    site = copy.deepcopy(sample_site)
+    site["fema"] = {"zone": "X", "subtype": None, "in_sfha": False, "bfe_ft": None, "datum": None}
+    site["ground_ft"], site["gauge"]["miles"] = 47.0, 30.8
+    b = brief.build_brief(site, freeboard_ft=2.0, start_year=2026)
+    for text in b["headline"] + b["questions"] + b["warnings"]:
+        assert not any(ch.isdigit() for ch in brief.TAG_RE.sub("", text)), text
+    assert "[[2021|measured]]" in b["questions"][0]  # Ida (2021)
