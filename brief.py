@@ -31,6 +31,10 @@ def fetch_site(address):
             return None
 
     site["fema"] = attempt("FEMA flood zone", sources.fema_zone, lat, lon)
+    datum = (site["fema"] or {}).get("datum")
+    if datum and datum.replace(" ", "").upper() != "NAVD88":  # USGS ground elevation is NAVD88
+        warnings.append(f"Flood map uses {datum}; the ground-vs-flood-level comparison "
+                        "may be off by about 1 ft.")
     site["ground_ft"] = attempt("Ground elevation", sources.ground_elevation, lat, lon)
     site["rain_depths"] = attempt("NOAA rainfall", sources.atlas14_24hr, lat, lon)
 

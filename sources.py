@@ -13,13 +13,18 @@ class SourceError(Exception):
     pass
 
 
-def _get(url, params):
-    try:
-        r = requests.get(url, params=params, timeout=config.HTTP_TIMEOUT)
-        r.raise_for_status()
-        return r
-    except requests.RequestException as e:
-        raise SourceError(f"{url} failed: {e}") from e
+def _get(url, params, timeout=None, retries=0):
+    """GET with an optional retry on timeouts/connection errors (not on HTTP errors)."""
+    for attempt in range(retries + 1):
+        try:
+            r = requests.get(url, params=params, timeout=timeout or config.HTTP_TIMEOUT)
+            r.raise_for_status()
+            return r
+        except (requests.Timeout, requests.ConnectionError) as e:
+            if attempt == retries:
+                raise SourceError(f"{url} failed after {retries + 1} tries: {e}") from e
+        except requests.RequestException as e:
+            raise SourceError(f"{url} failed: {e}") from e
 
 
 def geocode(address):
@@ -80,7 +85,8 @@ def fema_zone(lat, lon):
 def ground_elevation(lat, lon):
     """Ground elevation in feet (USGS 3DEP Elevation Point Query Service)."""
     r = _get(config.USGS_ELEVATION, {"x": lon, "y": lat, "wkid": 4326, "units": "Feet",
-                                     "includeDate": "false"})
+                                     "includeDate": "false"},
+             timeout=config.USGS_TIMEOUT, retries=config.USGS_RETRIES)
     try:
         v = float(r.json()["value"])
     except (KeyError, ValueError, TypeError) as e:

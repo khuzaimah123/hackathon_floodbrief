@@ -84,3 +84,7 @@ NOAA_ATLAS14_CSV = "https://hdsc.nws.noaa.gov/cgi-bin/hdsc/new/fe_text_mean.csv"
 NOAA_EXTREME_LEVELS = "https://api.tidesandcurrents.noaa.gov/dpapi/prod/webapi/product.json"
 
 HTTP_TIMEOUT = 20  # seconds; FEMA can be slow
+# USGS EPQS usually answers in 1-7 s but sometimes stalls past 20 s (seen in the Nov 2026
+# smoke test). A stalled request rarely recovers, so retry with a shorter timeout instead.
+USGS_TIMEOUT = 8   # seconds per try
+USGS_RETRIES = 2   # extra tries after the first (3 total, worst case ~24 s)
