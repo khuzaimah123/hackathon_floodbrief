@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flood Brief</title>
+<style>
+  :root { --ink:#1b2430; --muted:#5b6675; --line:#dfe3e8; --accent:#0b5cad; --warn:#b4532a; --bg:#f6f7f9; }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; font:15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:var(--ink); background:var(--bg); }
+  .wrap { max-width:820px; margin:0 auto; padding:28px 20px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  form { display:grid; grid-template-columns: 1fr 90px 110px 150px auto; gap:10px; align-items:end;
+         background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px; }
+  label { font-size:12px; color:var(--muted); display:block; margin-bottom:4px; }
+  input { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:7px; font:inherit; }
+  button { padding:9px 16px; border:0; border-radius:7px; background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  button.secondary { background:#fff; color:var(--accent); border:1px solid var(--accent); }
+  .try { margin:10px 2px 0; font-size:13px; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .try button { padding:4px 10px; font-size:13px; font-weight:500; }
+  #status { margin:14px 2px; color:var(--muted); min-height:1.5em; }
+  .error { color:var(--warn) !important; }
+  .page { background:#fff; border:1px solid var(--line); border-radius:10px; padding:30px 34px; display:none; }
+  .eyebrow { text-transform:uppercase; letter-spacing:.08em; font-size:11px; color:var(--muted); font-weight:600; }
+  .title { font-size:20px; font-weight:700; margin:2px 0 2px; }
+  .meta { color:var(--muted); font-size:13px; }
+  .banner { margin:12px 0 0; padding:8px 12px; background:#fff4ec; border:1px solid #f3d3bf; border-radius:7px; color:var(--warn); font-size:13px; }
+  section { margin-top:22px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); margin:0 0 8px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .headline { font-size:16px; }
+  .headline p { margin:0 0 8px; }
+  .facts { display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; }
+  .fact { border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .fact .k { font-size:11px; color:var(--muted); }
+  .fact .v { font-size:18px; font-weight:700; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  td, th { padding:7px 6px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
+  th { font-size:12px; color:var(--muted); font-weight:600; }
+  .bar { height:12px; background:#e9eef5; border-radius:6px; overflow:hidden; min-width:120px; }
+  .bar > span { display:block; height:100%; background:var(--accent); }
+  .bar.warm > span { background:var(--warn); }
+  .num { font-variant-numeric: tabular-nums; font-weight:600; white-space:nowrap; }
+  ol { margin:0; padding-left:20px; }
+  ol li { margin-bottom:6px; }
+  .summary-actions { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+  .summary-actions button { padding:5px 12px; font-size:13px; }
+  .summary-text p { margin:0 0 8px; }
+  .badge { display:inline-block; font-size:11px; font-weight:600; color:#1d6b3a; background:#e8f5ec; border:1px solid #b9dfc6; border-radius:999px; padding:1px 8px; margin-left:6px; vertical-align:middle; }
+  /* Number labels: every number is measured (●), modeled (▲) or assumed (◆) */
+  :root { --measured:#2e7d4f; --modeled:#0b5cad; --assumed:#a15c00; }
+  .tg { white-space:nowrap; }
+  .mk { display:inline-block; width:7px; height:7px; margin:0 1px 0 3px; vertical-align:0.45em;
+        -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .k-measured .mk { background:var(--measured); border-radius:50%; }
+  .k-modeled .mk { background:var(--modeled); width:8px; clip-path:polygon(50% 0, 100% 100%, 0 100%); }
+  .k-assumed .mk { background:var(--assumed); transform:rotate(45deg) scale(0.9); }
+  .legend { margin:10px 0 0; font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:4px 14px; }
+  .legend b { color:var(--ink); font-weight:600; }
+  .notes { font-size:12px; color:var(--muted); }
+  .notes p { margin:0 0 5px; }
+  @media (max-width:700px) { form { grid-template-columns:1fr 1fr; } .facts { grid-template-columns:1fr 1fr; } }
+  @media print {
+    body { background:#fff; }
+    .noprint { display:none !important; }
+    .wrap { padding:0; max-width:none; }
+    .page { border:0; padding:0; }
+    section { break-inside:avoid; }
+    section.sum-empty { display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="noprint">
+    <h1>Flood Brief</h1>
+    <p class="sub">An independent, one-page flood briefing for a planning or zoning board member, built from public FEMA, NOAA, USGS and NJDEP data.</p>
+    <form id="f">
+      <div><label for="address">Site address</label>
+        <input id="address" placeholder="e.g. 1 Main St, Long Branch, NJ 07740" required></div>
+      <div><label for="years">Years</label><input id="years" type="number" value="30" min="1" max="100"></div>
+      <div><label for="fb">Floor above BFE (ft)</label><input id="fb" type="number" value="0" min="0" max="10" step="0.5"></div>
+      <div><label for="hearing">Hearing (optional)</label><input id="hearing" placeholder="e.g. Zoning Board, Dec 9"></div>
+      <button type="submit">Build brief</button>
+    </form>
+    <div id="try" class="try" hidden></div>
+    <div id="status"></div>
+  </div>
+
+  <div class="page" id="page"></div>
+  <div class="noprint" style="margin-top:14px; display:none" id="actions">
+    <button class="secondary" onclick="window.print()">Print / save as PDF</button>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const pct = (x) => (x > 0 && x < 0.005) ? "<1%" : Math.round(x * 100) + "%";
+const nYears = (n) => n === 1 ? "1 year" : n + " years";
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// Every number shown is labeled measured / modeled / assumed (see the legend on the brief).
+const KINDS = {  // marker shapes: measured = green circle, modeled = blue triangle, assumed = orange diamond
+  measured: ["Measured", "taken from FEMA, USGS or NOAA data"],
+  modeled:  ["Modeled", "calculated by this tool"],
+  assumed:  ["Assumed", "a chosen time span, floor height, scenario or standard"],
+};
+const T = (text, kind) => `<span class="tg k-${kind}" title="${KINDS[kind][0]}: ${KINDS[kind][1]}">${esc(text)}<i class="mk" aria-label="(${kind})"></i></span>`;
+const TAG = /\[\[([^\[\]|]+)\|(measured|modeled|assumed)\]\]/g;
+function tagged(s) {  // "about [[26%|modeled]]" -> about 26%▲ (escaped, labeled)
+  s = String(s ?? ""); let out = "", last = 0;
+  for (const m of s.matchAll(TAG)) { out += esc(s.slice(last, m.index)) + T(m[1], m[2]); last = m.index + m[0].length; }
+  return out + esc(s.slice(last));
+}
+const legend = () => `<div class="legend">Every number is labeled: ${Object.entries(KINDS).map(([k, [name, what]]) =>
+  `<span class="k-${k}"><b>${name}</b><i class="mk"></i> ${what}</span>`).join("")}</div>`;
+
+$("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const params = new URLSearchParams({ address: $("address").value, years: $("years").value, freeboard: $("fb").value });
+  $("status").className = ""; $("status").textContent = "Looking up FEMA, NOAA, USGS and NJDEP data (FEMA can take ~10 seconds)...";
+  $("page").style.display = "none"; $("actions").style.display = "none";
+  try {
+    const r = await fetch("/api/brief?" + params);
+    const b = await r.json();
+    if (!r.ok) throw new Error(b.error || "Lookup failed");
+    render(b); $("status").textContent = "";
+  } catch (err) {
+    $("status").className = "error"; $("status").textContent = err.message;
+  }
+});
+
+// "Try:" buttons send the exact strings in config.DEMO_ADDRESSES, so they always hit the cache.
+fetch("/api/demo-addresses").then(r => r.json()).then(list => {
+  if (!list.length) return;
+  const box = $("try");
+  box.innerHTML = "Try:";
+  for (const a of list) {
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "secondary"; btn.title = a;
+    btn.textContent = a.split(",")[1]?.trim() || a;  // town name
+    btn.onclick = () => { $("address").value = a; $("f").requestSubmit(); };
+    box.appendChild(btn);
+  }
+  box.hidden = false;
+}).catch(() => {});
+
+// Optional Gemini summary: buttons only appear if the server has GEMINI_API_KEY.
+let summaryEnabled = false, lastBrief = null, lastEnglish = null;
+fetch("/api/features").then(r => r.json()).then(f => { summaryEnabled = !!f.summary; }).catch(() => {});
+
+async function getSummary(lang) {
+  const out = $("summary-text"), en = $("btn-sum"), es = $("btn-es");
+  en.disabled = es.disabled = true;
+  out.innerHTML = `<p class="meta">${lang === "es" ? "Translating" : "Writing a summary"} (can take ~20 seconds)...</p>`;
+  let s;
+  try {
+    const r = await fetch("/api/summary", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ brief: lastBrief, lang, text: lang === "es" ? lastEnglish : undefined }) });
+    s = await r.json();
+  } catch (err) { s = { ok: false, text: "Summary unavailable." }; }
+  if (s.ok && lang === "en") lastEnglish = s.text;
+  $("summary-sec").classList.toggle("sum-empty", !s.ok);
+  const label = lang === "es" ? "Resumen en español" : "Plain-English summary";
+  out.innerHTML = s.ok
+    ? `<p><b>${label}</b><span class="badge" title="Every number was checked against the brief">✓ numbers verified</span></p><p>${tagged(s.text)}</p>`
+    : `<p class="meta">${esc(s.text || "Summary unavailable.")}</p>`;
+  if (!s.ok && s.reason) console.warn("Summary:", s.reason);
+  en.disabled = false; es.disabled = !lastEnglish;
+}
+
+function bar(x, warm) {
+  return `<div class="bar ${warm ? "warm" : ""}"><span style="width:${Math.min(100, x * 100)}%"></span></div>`;
+}
+
+function render(b) {
+  const t = b.today, o = b.odds, rain = b.rain;
+  const hearing = $("hearing").value.trim();
+  const zoneLabel = t.zone ? (t.zone + (t.subtype ? " — " + t.subtype.toLowerCase() : "")) : "Not mapped";
+  let html = `
+    <div class="eyebrow">Flood brief${hearing ? " · " + esc(hearing) : ""}</div>
+    <div class="title">${esc(b.site.matched_address)}</div>
+    <div class="meta">${b.site.county ? esc(b.site.county) + " County · " : ""}${T(b.site.lat.toFixed(4) + ", " + b.site.lon.toFixed(4), "measured")} ·
+      ${T(b.years + "-year", "assumed")} outlook (${T(b.start_year + "–" + b.end_year, "assumed")})${b.freeboard_applied ? " · floor " + T(b.freeboard_ft + " ft", "assumed") + " above BFE" : ""}</div>
+    ${legend()}
+    ${b.warnings.length ? `<div class="banner">${b.warnings.map(tagged).join("<br>")}</div>` : ""}
+
+    <section><h2>Bottom line</h2><div class="headline">${b.headline.map(h => `<p>${tagged(h)}</p>`).join("")}</div></section>
+
+    <section><h2>Today</h2><div class="facts">
+      <div class="fact"><div class="k">FEMA flood zone</div><div class="v">${esc(t.zone || "—")}</div></div>
+      <div class="fact"><div class="k">Base flood elevation</div><div class="v">${t.bfe_ft != null ? T(t.bfe_ft + " ft", "measured") : "—"}</div></div>
+      <div class="fact"><div class="k">Ground elevation</div><div class="v">${t.ground_ft != null ? T(t.ground_ft + " ft", "measured") : "—"}</div></div>
+      <div class="fact"><div class="k">Ground vs. flood level</div><div class="v">${t.ground_below_bfe_ft != null ? (t.ground_below_bfe_ft > 0 ? T(t.ground_below_bfe_ft + " ft", "measured") + " below" : T(Math.abs(t.ground_below_bfe_ft) + " ft", "measured") + " above") : "—"}</div></div>
+    </div><p class="meta" style="margin-top:8px">${esc(zoneLabel)}. ${t.in_sfha ? "Inside the " + T("1%", "assumed") + " annual-chance floodplain (Special Flood Hazard Area)." : "Outside the " + T("1%", "assumed") + " annual-chance floodplain."}</p></section>`;
+
+  if (o) {
+    // Today's row: the 1-in-100 anchor is an assumption; with a raised floor it's modeled.
+    const rows = [["Today's FEMA map (climate held fixed)", o.today_map, false, o.p_today, b.freeboard_applied ? "modeled" : "assumed"]];
+    const names = { low: "Sea-level rise: low", central: "Sea-level rise: central", high: "Sea-level rise: high" };
+    for (const k of ["low", "central", "high"]) if (o.scenarios[k]) rows.push([names[k], o.scenarios[k].chance, true, o.scenarios[k].p_end, "modeled"]);
+    html += `<section><h2>Chance of at least one major flood in ${T(nYears(b.years), "assumed")}</h2><table>
+      <tr><th>Assumption</th><th></th><th>Chance</th><th>Odds in ${T(b.end_year, "assumed")}</th></tr>
+      ${rows.map(([n, c, warm, pEnd, kind]) => `<tr><td>${n}</td><td>${bar(c, warm)}</td><td class="num">${T(pct(c), "modeled")}</td>
+        <td class="num">${T("1 in " + Math.round(1 / pEnd), kind)} per year</td></tr>`).join("")}
+    </table></section>`;
+    if (o.freeboard.length) {
+      html += `<section><h2>What raising the floor buys (central sea-level rise)</h2><table>
+        <tr><th>Lowest floor</th><th></th><th>${T(b.years + "-yr", "assumed")} chance</th></tr>
+        ${o.freeboard.map(x => `<tr><td>${x.feet === 0 ? "At base flood elevation" : T(x.feet + " ft", "assumed") + " above"}</td>
+          <td>${bar(x.chance, true)}</td><td class="num">${T(pct(x.chance), "modeled")}</td></tr>`).join("")}
+      </table></section>`;
+    }
+  }
+
+  if (rain) {
+    const y100 = T("100-year", "assumed");
+    html += `<section><h2>Heavy rain</h2><p>Today's ${y100}, ${T("24-hour", "assumed")} storm here: <b>${T(rain.today_100yr_in.toFixed(1) + " in", "measured")}</b> (NOAA Atlas 14).`;
+    if (rain.future_100yr_in) html += ` NJDEP's design factor for ${esc(rain.county)} County raises the ${y100} storm by <b>${T(rain.pct_increase + "%", "assumed")}</b> to about <b>${T(rain.future_100yr_in + " in", "modeled")}</b>${rain.today_storm_future_return_period ? `, so today's ${y100} rainfall becomes roughly a <b>${T(rain.today_storm_future_return_period + "-year", "modeled")}</b> storm` : ""}.`;
+    html += `</p></section>`;
+  }
+
+  if (summaryEnabled) {
+    html += `<section id="summary-sec" class="sum-empty"><h2>Summary</h2>
+      <div class="summary-actions noprint">
+        <button type="button" class="secondary" id="btn-sum">Plain-English summary</button>
+        <button type="button" class="secondary" id="btn-es" disabled title="Make the English summary first">Translate (Spanish)</button>
+      </div><div class="summary-text" id="summary-text"></div></section>`;
+  }
+
+  html += `<section><h2>Questions to ask the developer</h2><ol>${b.questions.map(q => `<li>${tagged(q)}</li>`).join("")}</ol></section>
+    <section class="notes"><h2>Method &amp; sources</h2>
+      <p>Chance of at least one flood = 1 − (1 − p₁)(1 − p₂)…(1 − pₙ), with each year's chance p computed separately.</p>
+      ${b.coastal && b.gauge.name ? `<p>Coastal odds use NOAA's flood-frequency curve for the ${esc(b.gauge.name)} tide gauge (${T(b.gauge.miles + " mi", "measured")} away), anchored so FEMA's base flood elevation has a ${T("1%", "assumed")} chance today, then shifted by NJ sea-level rise projections (Rutgers STAP 2025: ${T("0.9–1.7 ft by 2050", "assumed")}, ${T("2.2–3.8 ft by 2100", "assumed")} vs. ${T("2005", "assumed")}; "central" is the midpoint).</p>` : ""}
+      <p>Sources: FEMA National Flood Hazard Layer; USGS 3DEP elevation; NOAA Atlas 14; NOAA CO-OPS Extreme Water Levels; NJDEP future precipitation change factors (N.J.A.C. 7:8, ${T("2050–2099", "assumed")}, moderate emissions).</p>
+      <p>These are planning estimates, not engineering certifications. Map elevations are often in NAVD88; ground elevation is approximate.</p>
+    </section>`;
+  $("page").innerHTML = html;
+  lastBrief = b; lastEnglish = null;
+  if (summaryEnabled) {
+    $("btn-sum").onclick = () => getSummary("en");
+    $("btn-es").onclick = () => getSummary("es");
+  }
+  $("page").style.display = "block"; $("actions").style.display = "block";
+}
+</script>
+</body>
+</html>
