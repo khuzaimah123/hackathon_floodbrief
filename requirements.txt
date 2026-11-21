@@ -1,3 +1,5 @@
 flask>=3.0
 requests>=2.31
 pytest>=8.0
+google-genai>=3.0  # optional Gemini summary
+python-dotenv>=1.0

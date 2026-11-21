@@ -44,6 +44,21 @@ python3 -m pytest tests   # tests for the math
 
 No AI is used for numbers. Everything in the brief is computed in code.
 
+## Optional: Gemini summary + Spanish translation
+
+Put `GEMINI_API_KEY=...` in a `.env` file in this folder (it is git-ignored), or export it.
+With no key, the summary buttons are hidden.
+
+- `summary.py` asks Gemini (model list in `config.GEMINI_MODELS`, falls back to the next model if
+  one is overloaded) for a 3-sentence summary of the brief JSON, and can translate it to Spanish.
+- **Number guardrail:** every number in the model's reply must appear in the brief JSON (after
+  rounding; probabilities may appear as percents). If any doesn't, the reply is discarded and the
+  page shows "Summary unavailable." Passing replies get a "numbers verified" badge.
+- Limits: small numbers like 1, 2, 3 appear all over the brief, so they always pass; numbers
+  written as words aren't checked (the prompt asks for digits).
+- Verified summaries are saved in `cache/summary_*.json`. `warm_cache.py` pre-saves them for the
+  demo addresses, so the demo doesn't depend on Gemini being up.
+
 ## Before the hackathon (important)
 
 1. **Test live mode on real addresses.** The data calls were written against the documented

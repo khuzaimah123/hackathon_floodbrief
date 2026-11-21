@@ -14,18 +14,19 @@ class SourceError(Exception):
 
 
 def _get(url, params, timeout=None, retries=0):
-    """GET with an optional retry on timeouts/connection errors (not on HTTP errors)."""
+    """GET with optional retries on timeouts, connection errors and 5xx server errors."""
     for attempt in range(retries + 1):
         try:
             r = requests.get(url, params=params, timeout=timeout or config.HTTP_TIMEOUT)
             r.raise_for_status()
             return r
-        except (requests.Timeout, requests.ConnectionError) as e:
-            if attempt == retries:
-                tries = f" after {retries + 1} tries" if retries else ""
-                raise SourceError(f"{url} failed{tries}: {e}") from e
         except requests.RequestException as e:
-            raise SourceError(f"{url} failed: {e}") from e
+            status = getattr(e.response, "status_code", None)
+            transient = (isinstance(e, (requests.Timeout, requests.ConnectionError))
+                         or (status is not None and status >= 500))
+            if not transient or attempt == retries:
+                tries = f" after {attempt + 1} tries" if attempt else ""
+                raise SourceError(f"{url} failed{tries}: {e}") from e
 
 
 def _json(r):

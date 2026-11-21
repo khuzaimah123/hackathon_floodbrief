@@ -1,7 +1,8 @@
 """
 Pre-load the cache before judging: runs a full live lookup for each address in
 config.DEMO_ADDRESSES (through the same load_site the app uses), builds the brief,
-and prints a status table.
+and prints a status table. If GEMINI_API_KEY is set, it also saves the English summary
+and Spanish translation for the default brief (30 years, floor at BFE).
 
     python3 warm_cache.py
 """
@@ -13,6 +14,7 @@ os.environ.pop("SAMPLE", None)  # always do real lookups here
 import app  # noqa: E402
 import brief  # noqa: E402
 import config  # noqa: E402
+import summary  # noqa: E402
 
 
 def main():
@@ -23,7 +25,7 @@ def main():
             site = app.load_site(address)
             b = brief.build_brief(site)
         except Exception as e:  # report every failure, keep going
-            rows.append([address, "FAIL", f"{time.time() - t:.1f}s", "", "", "", "", ""])
+            rows.append([address, "FAIL", f"{time.time() - t:.1f}s", "", "", "", "", "", ""])
             notes.append(f"{address}: {type(e).__name__}: {e}")
             continue
         if site.get("from_cache"):
@@ -32,6 +34,14 @@ def main():
             status = "LIVE, saved"
         else:
             status = "LIVE, NOT saved"
+        sum_status = "-"
+        if summary.enabled():
+            en = summary.summarize(b, "en")
+            es = summary.summarize(b, "es", en["text"]) if en["ok"] else {"ok": False}
+            sum_status = f"en {'OK' if en['ok'] else 'FAIL'} / es {'OK' if es['ok'] else 'FAIL'}"
+            for lang, r in (("en", en), ("es", es)):
+                if r.get("reason"):
+                    notes.append(f"{address}: summary {lang}: {r['reason']}")
         t_ = b["today"]
         curve = (site.get("gauge") or {}).get("curve")
         rows.append([
@@ -41,10 +51,11 @@ def main():
             f"{t_['ground_ft']:g}" if t_["ground_ft"] is not None else "-",
             f"{len(curve)} pts" if curve else "-",
             str(len(b["warnings"])),
+            sum_status,
         ])
         notes += [f"{address}: {w}" for w in b["warnings"]]
 
-    head = ["Address", "Result", "Time", "Zone", "BFE ft", "Ground ft", "Curve", "Warn"]
+    head = ["Address", "Result", "Time", "Zone", "BFE ft", "Ground ft", "Curve", "Warn", "Summary"]
     widths = [max(len(str(r[i])) for r in rows + [head]) for i in range(len(head))]
     line = lambda r: "  ".join(str(c).ljust(w) for c, w in zip(r, widths))  # noqa: E731
     print(line(head))

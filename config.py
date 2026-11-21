@@ -103,3 +103,12 @@ DEMO_ADDRESSES = [
     "275 Beachway Ave, Keansburg, NJ 07734",
     "325 N Main St, Manville, NJ 08835",
 ]
+
+# ---------------------------------------------------------------------------
+# Optional Gemini summary (summary.py). Needs GEMINI_API_KEY in the environment or .env.
+# Models are tried in order: if one is overloaded (503), times out or is rate-limited, the
+# next is used. Set GEMINI_MODEL to override the first. Nov 2026: 3.8-flash is the latest
+# stable Flash but often returned 503/504 on the free tier; 3.5-flash-lite answered in <1 s.
+# ---------------------------------------------------------------------------
+GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"]
+GEMINI_TIMEOUT_S = 10  # per model attempt; a healthy Flash answers this prompt in a few seconds

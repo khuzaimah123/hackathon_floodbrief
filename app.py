@@ -18,8 +18,14 @@ from flask import Flask, jsonify, request, send_from_directory
 import brief
 import config
 import sources
+import summary
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+try:  # GEMINI_API_KEY etc. from .env (never committed); real env vars win
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(HERE, ".env"))
+except ImportError:
+    pass
 CACHE = config.CACHE_DIR
 os.makedirs(CACHE, exist_ok=True)
 app = Flask(__name__, static_folder="static")
@@ -94,6 +100,22 @@ def index():
 @app.get("/api/demo-addresses")
 def api_demo_addresses():
     return jsonify(config.DEMO_ADDRESSES)
+
+
+@app.get("/api/features")
+def api_features():
+    return jsonify({"summary": summary.enabled()})
+
+
+@app.post("/api/summary")
+def api_summary():
+    if not summary.enabled():
+        return jsonify({"error": "Summary is not configured (no GEMINI_API_KEY)."}), 404
+    body = request.get_json(silent=True) or {}
+    b, lang = body.get("brief"), body.get("lang", "en")
+    if not isinstance(b, dict) or lang not in ("en", "es"):
+        return jsonify({"error": "Send {brief: {...}, lang: 'en' | 'es'}."}), 400
+    return jsonify(summary.summarize(b, lang, body.get("text")))
 
 
 @app.get("/api/brief")
