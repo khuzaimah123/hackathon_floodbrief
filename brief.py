@@ -4,6 +4,7 @@ Every number in the output is computed here in code (no AI guesses).
 """
 import datetime
 import json
+import math
 import os
 import time
 
@@ -13,7 +14,13 @@ import sources
 
 
 def pct(x):
-    return f"{round(100 * x)}%"
+    if 0 < x < 0.005:
+        return "<1%"
+    return f"{math.floor(100 * x + 0.5)}%"  # half-up, like JS Math.round (round(0.5) == 0)
+
+
+def n_years(n):
+    return f"{n} year" if n == 1 else f"{n} years"
 
 
 def one_in(p):
@@ -98,6 +105,28 @@ def is_coastal(site):
             and ground <= config.COASTAL_MAX_GROUND_FT)
 
 
+def freeboard_rows(f):
+    """Floor heights for the 'what raising the floor buys' table: f..f+3, plus 0 if f > 0."""
+    return ([0.0] if f > 0 else []) + [f + d for d in (0, 1, 2, 3)]
+
+
+def coastal_odds(curve, start_year, years, freeboard_ft):
+    """Sea-level-rise odds for a coastal site. Raises ValueError if the curve lacks 1%."""
+    anchor = risk.level_at_prob(curve, 0.01)
+    p_today = risk.prob_at_level(curve, anchor + freeboard_ft) if freeboard_ft else 0.01
+    scenarios = {}
+    for name, scen in config.SLR_SCENARIOS.items():
+        ps = risk.coastal_annual_probs(curve, start_year, years, scen, freeboard_ft)
+        scenarios[name] = {"chance": risk.chance_of_at_least_one(ps),
+                           "p_end": ps[-1], "p_start": ps[0]}
+    central = config.SLR_SCENARIOS["central"]
+    rows = []
+    for fb in freeboard_rows(freeboard_ft):
+        ps = risk.coastal_annual_probs(curve, start_year, years, central, fb)
+        rows.append({"feet": fb, "chance": risk.chance_of_at_least_one(ps)})
+    return {"p_today": p_today, "scenarios": scenarios, "freeboard": rows}
+
+
 def build_brief(site, years=30, freeboard_ft=0.0, start_year=None):
     start_year = start_year or datetime.date.today().year
     end_year = start_year + years - 1
@@ -125,32 +154,30 @@ def build_brief(site, years=30, freeboard_ft=0.0, start_year=None):
     }
 
     # ---- Flood odds -------------------------------------------------------
+    fb_applied = False  # did the floor height actually change any odds?
     if in_sfha:
-        p_today = 0.01
-        if coastal and curve and freeboard_ft:
-            anchor = risk.level_at_prob(curve, 0.01)
-            p_today = risk.prob_at_level(curve, anchor + freeboard_ft)
-        today = risk.fixed_chance(p_today, years)
-        odds = {"today_map": today, "p_today": p_today, "scenarios": {}, "freeboard": []}
+        cx = None
         if coastal and curve:
-            for name, scen in config.SLR_SCENARIOS.items():
-                ps = risk.coastal_annual_probs(curve, start_year, years, scen, freeboard_ft)
-                odds["scenarios"][name] = {
-                    "chance": risk.chance_of_at_least_one(ps),
-                    "p_end": ps[-1], "p_start": ps[0],
-                }
-            central = config.SLR_SCENARIOS["central"]
-            for fb in (0, 1, 2, 3):
-                ps = risk.coastal_annual_probs(curve, start_year, years, central, fb)
-                odds["freeboard"].append({"feet": fb, "chance": risk.chance_of_at_least_one(ps)})
+            try:
+                cx = coastal_odds(curve, start_year, years, freeboard_ft)
+            except ValueError:  # live curve doesn't reach the 1% level
+                out["warnings"].append(
+                    f"The NOAA curve for {out['gauge'].get('name', 'the nearest gauge')} doesn't "
+                    "reach the 1% level, so only today's FEMA-map odds are shown.")
+        fb_applied = cx is not None and freeboard_ft > 0
+        p_today = cx["p_today"] if cx else 0.01
+        today = risk.fixed_chance(p_today, years)
+        odds = {"today_map": today, "p_today": p_today,
+                "scenarios": cx["scenarios"] if cx else {},
+                "freeboard": cx["freeboard"] if cx else []}
         out["odds"] = odds
 
-        if odds["scenarios"]:
+        if cx:
             c = odds["scenarios"]["central"]
             lo, hi = odds["scenarios"]["low"]["chance"], odds["scenarios"]["high"]["chance"]
             floor_note = "" if freeboard_ft == 0 else f" for a floor {freeboard_ft:g} ft above the base flood elevation"
             out["headline"].append(
-                f"Over {years} years, the chance of at least one major flood{floor_note} is about "
+                f"Over {n_years(years)}, the chance of at least one major flood{floor_note} is about "
                 f"{pct(today)} on today's FEMA map, and about {pct(c['chance'])} "
                 f"(range {pct(lo)}–{pct(hi)}) once projected sea-level rise is included.")
             what = ("today's 100-year flood level" if not freeboard_ft
@@ -158,20 +185,32 @@ def build_brief(site, years=30, freeboard_ft=0.0, start_year=None):
             out["headline"].append(
                 f"By {end_year}, {what} floods about as often as a "
                 f"{round(1 / c['p_end'])}-year flood does today (central projection).")
-            fb2 = next(x for x in odds["freeboard"] if x["feet"] == 2)
-            fb0 = odds["freeboard"][0]
+            fb = {x["feet"]: x["chance"] for x in odds["freeboard"]}
+            f, f2 = freeboard_ft, freeboard_ft + 2
+            if f == 0:
+                raise_from = "Raising the lowest floor 2 ft above the base flood elevation"
+            else:
+                raise_from = (f"Raising the lowest floor from {f:g} ft to {f2:g} ft above the "
+                              "base flood elevation")
             out["headline"].append(
-                f"Raising the lowest floor 2 ft above the base flood elevation cuts the "
-                f"{years}-year odds from {pct(fb0['chance'])} to {pct(fb2['chance'])}.")
+                f"{raise_from} cuts the {years}-year odds from {pct(fb[f])} to {pct(fb[f2])}.")
         else:
             out["headline"].append(
-                f"Over {years} years, the chance of at least one major flood is about "
+                f"Over {n_years(years)}, the chance of at least one major flood is about "
                 f"{pct(today)} on today's FEMA map (about 1 in {round(1 / today)}).")
     else:
         zone = fema.get("zone") or "unmapped"
         out["headline"].append(
             f"This site is outside FEMA's 1% annual-chance floodplain (zone {zone}). "
             "That means lower, not zero, risk: heavy rainfall floods areas the maps miss.")
+
+    out["freeboard_applied"] = fb_applied
+    if freeboard_ft > 0 and not fb_applied:
+        if coastal and curve and not in_sfha:
+            out["warnings"].append("Floor height only changes the odds for sites inside the "
+                                   "FEMA floodplain.")
+        else:
+            out["warnings"].append("Floor height only changes the odds for coastal sites.")
 
     # ---- Rainfall -------------------------------------------------------------
     depths, county = site.get("rain_depths"), site.get("county")
@@ -204,9 +243,11 @@ def questions(b):
                  "meet state and local freeboard requirements?")
     if odds.get("freeboard"):
         fb = {x["feet"]: x["chance"] for x in odds["freeboard"]}
+        f = b["freeboard_ft"]
+        at = "At the base flood elevation" if f == 0 else f"At {f:g} ft above the base flood elevation"
         q.append(f"Was the design based on today's flood map or projected sea level? "
-                 f"At the base flood elevation the {b['years']}-year odds are about {pct(fb[0])}; "
-                 f"2 ft higher they drop to about {pct(fb[2])}. What would the extra elevation cost?")
+                 f"{at} the {b['years']}-year odds are about {pct(fb[f])}; "
+                 f"2 ft higher they drop to about {pct(fb[f + 2])}. What would the extra elevation cost?")
     if t["ground_below_bfe_ft"] is not None and t["ground_below_bfe_ft"] > 0:
         q.append(f"The ground sits about {t['ground_below_bfe_ft']:g} ft below the base flood "
                  "elevation. Will the site be filled, and where does displaced water go?")

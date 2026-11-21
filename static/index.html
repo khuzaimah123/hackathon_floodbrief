@@ -80,7 +80,8 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-const pct = (x) => Math.round(x * 100) + "%";
+const pct = (x) => (x > 0 && x < 0.005) ? "<1%" : Math.round(x * 100) + "%";
+const nYears = (n) => n === 1 ? "1 year" : n + " years";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 $("f").addEventListener("submit", async (e) => {
@@ -125,7 +126,7 @@ function render(b) {
     <div class="eyebrow">Flood brief${hearing ? " · " + esc(hearing) : ""}</div>
     <div class="title">${esc(b.site.matched_address)}</div>
     <div class="meta">${b.site.county ? esc(b.site.county) + " County · " : ""}${b.site.lat.toFixed(4)}, ${b.site.lon.toFixed(4)} ·
-      ${b.years}-year outlook (${b.start_year}–${b.end_year})${b.freeboard_ft ? " · floor " + b.freeboard_ft + " ft above BFE" : ""}</div>
+      ${b.years}-year outlook (${b.start_year}–${b.end_year})${b.freeboard_applied ? " · floor " + b.freeboard_ft + " ft above BFE" : ""}</div>
     ${b.warnings.length ? `<div class="banner">${b.warnings.map(esc).join("<br>")}</div>` : ""}
 
     <section><h2>Bottom line</h2><div class="headline">${b.headline.map(h => `<p>${esc(h)}</p>`).join("")}</div></section>
@@ -141,7 +142,7 @@ function render(b) {
     const rows = [["Today's FEMA map (climate held fixed)", o.today_map, false, o.p_today]];
     const names = { low: "Sea-level rise: low", central: "Sea-level rise: central", high: "Sea-level rise: high" };
     for (const k of ["low", "central", "high"]) if (o.scenarios[k]) rows.push([names[k], o.scenarios[k].chance, true, o.scenarios[k].p_end]);
-    html += `<section><h2>Chance of at least one major flood in ${b.years} years</h2><table>
+    html += `<section><h2>Chance of at least one major flood in ${nYears(b.years)}</h2><table>
       <tr><th>Assumption</th><th></th><th>Chance</th><th>Odds in ${b.end_year}</th></tr>
       ${rows.map(([n, c, warm, pEnd]) => `<tr><td>${n}</td><td>${bar(c, warm)}</td><td class="num">${pct(c)}</td>
         <td class="num">1 in ${Math.round(1 / pEnd)} per year</td></tr>`).join("")}
