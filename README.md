@@ -80,17 +80,6 @@ Gemini is never called. If there are no saved summaries either, the buttons are 
 - Verified summaries are saved in `cache/summary_*.json`. `warm_cache.py` pre-saves them for the
   demo addresses, so the demo doesn't depend on Gemini being up.
 
-## Before the hackathon (important)
-
-1. **Test live mode on real addresses.** The data calls were written against the documented
-   APIs and tested with mock responses, but not run against the live servers.
-   Try 3–4 addresses and fix anything that breaks (FEMA is the most likely to be slow or picky).
-2. **Pre-load your demo addresses:** run `python3 warm_cache.py` (and `python3 smoke_test.py`
-   to check each data source on its own). Any lookup where geocode, FEMA and ground elevation
-   succeed is saved to `cache/`, along with each tide gauge's curve. If the Wi-Fi fails during
-   judging, or a live lookup comes back with more warnings, the app uses the saved copy.
-3. Demo addresses (`config.DEMO_ADDRESSES`, also the "Try:" buttons): Sea Bright and Keansburg
-   (coastal AE zones) and Manville (inland, outside the FEMA floodplain, flooded by Ida in 2021).
 
 ## Suggested team split
 
