@@ -2,7 +2,7 @@
 Live smoke test: calls each data source in sources.py on its own and prints OK/FAIL,
 the time it took, and the key values it returned.
 
-    python3 smoke_test.py                       # default: Long Branch
+    python3 smoke_test.py                       # default: config.DEMO_ADDRESSES
     python3 smoke_test.py "1 Main St, Town, NJ"  # any address(es)
 """
 import sys
@@ -13,7 +13,6 @@ import requests
 import config
 import sources
 
-DEFAULT_ADDRESS = "100 Ocean Ave, Long Branch, NJ 07740"
 FEMA_LAYER_FIELDS = ["FLD_ZONE", "ZONE_SUBTY", "SFHA_TF", "STATIC_BFE", "V_DATUM"]
 
 
@@ -80,5 +79,5 @@ def smoke(address):
 
 if __name__ == "__main__":
     check_fema_layer()
-    for addr in sys.argv[1:] or [DEFAULT_ADDRESS]:
+    for addr in sys.argv[1:] or config.DEMO_ADDRESSES:
         smoke(addr)

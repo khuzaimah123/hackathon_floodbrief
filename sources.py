@@ -22,9 +22,18 @@ def _get(url, params, timeout=None, retries=0):
             return r
         except (requests.Timeout, requests.ConnectionError) as e:
             if attempt == retries:
-                raise SourceError(f"{url} failed after {retries + 1} tries: {e}") from e
+                tries = f" after {retries + 1} tries" if retries else ""
+                raise SourceError(f"{url} failed{tries}: {e}") from e
         except requests.RequestException as e:
             raise SourceError(f"{url} failed: {e}") from e
+
+
+def _json(r):
+    """Parse a response as JSON; an HTML error page becomes a SourceError, not a crash."""
+    try:
+        return r.json()
+    except ValueError as e:
+        raise SourceError(f"{r.url.split('?')[0]} returned a non-JSON response") from e
 
 
 def geocode(address):
@@ -36,7 +45,7 @@ def geocode(address):
         "layers": "Counties",
         "format": "json",
     })
-    matches = r.json().get("result", {}).get("addressMatches", [])
+    matches = _json(r).get("result", {}).get("addressMatches", [])
     if not matches:
         raise SourceError("Address not found. Try including city, state and ZIP.")
     m = matches[0]
@@ -63,7 +72,7 @@ def fema_zone(lat, lon):
         "returnGeometry": "false",
         "f": "json",
     })
-    data = r.json()
+    data = _json(r)
     if "error" in data:
         raise SourceError(f"FEMA error: {data['error']}")
     feats = data.get("features", [])
@@ -88,7 +97,7 @@ def ground_elevation(lat, lon):
                                      "includeDate": "false"},
              timeout=config.USGS_TIMEOUT, retries=config.USGS_RETRIES)
     try:
-        v = float(r.json()["value"])
+        v = float(_json(r)["value"])
     except (KeyError, ValueError, TypeError) as e:
         raise SourceError("USGS elevation returned no value") from e
     if v < -1000:  # no-data sentinel
@@ -116,7 +125,7 @@ def gauge_curve(station_id):
     r = _get(config.NOAA_EXTREME_LEVELS, {"name": "extremewaterlevels", "station": station_id,
                                           "details": "exceedancelevels", "levelType": "high",
                                           "units": "english"})
-    levels = (r.json().get("GEV_HI") or {}).get("exceedanceLevels") or []
+    levels = (_json(r).get("GEV_HI") or {}).get("exceedanceLevels") or []
     curve = [(float(x["probability"]), float(x["level"])) for x in levels]
     if len(curve) < 5:
         raise SourceError(f"No exceedance curve for station {station_id}")

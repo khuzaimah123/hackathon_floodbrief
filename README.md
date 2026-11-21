@@ -49,9 +49,12 @@ No AI is used for numbers. Everything in the brief is computed in code.
 1. **Test live mode on real addresses.** The data calls were written against the documented
    APIs and tested with mock responses, but not run against the live servers.
    Try 3–4 addresses and fix anything that breaks (FEMA is the most likely to be slow or picky).
-2. **Pre-load your demo addresses.** Every complete live lookup is saved to `cache/`.
-   If the Wi-Fi fails during judging, the app automatically uses the saved copy.
-3. Good demo spots: Long Branch, Sea Bright, Keansburg (coastal). For inland, Manville (Ida, 2021).
+2. **Pre-load your demo addresses:** run `python3 warm_cache.py` (and `python3 smoke_test.py`
+   to check each data source on its own). Any lookup where geocode, FEMA and ground elevation
+   succeed is saved to `cache/`, along with each tide gauge's curve. If the Wi-Fi fails during
+   judging, or a live lookup comes back with more warnings, the app uses the saved copy.
+3. Demo addresses (`config.DEMO_ADDRESSES`, also the "Try:" buttons): Sea Bright and Keansburg
+   (coastal AE zones) and Manville (inland, outside the FEMA floodplain, flooded by Ida in 2021).
 
 ## Suggested team split
 

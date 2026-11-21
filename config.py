@@ -2,6 +2,7 @@
 All the numbers the app relies on, in one place, with sources.
 If a judge asks "where does that come from?", the answer is in this file.
 """
+import os
 
 # ---------------------------------------------------------------------------
 # NOAA tide gauges used for coastal sites (CO-OPS Extreme Water Levels product)
@@ -88,3 +89,17 @@ HTTP_TIMEOUT = 20  # seconds; FEMA can be slow
 # smoke test). A stalled request rarely recovers, so retry with a shorter timeout instead.
 USGS_TIMEOUT = 8   # seconds per try
 USGS_RETRIES = 2   # extra tries after the first (3 total, worst case ~24 s)
+
+# Saved lookups and gauge curves (committed to git so the demo works offline).
+CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
+
+# ---------------------------------------------------------------------------
+# Demo addresses (the "Try:" buttons and warm_cache.py use exactly these strings)
+# Sea Bright + Keansburg: coastal AE zones, ground ~4-5 ft below the BFE.
+# Manville: inland, outside the FEMA floodplain, flooded by Ida (2021).
+# ---------------------------------------------------------------------------
+DEMO_ADDRESSES = [
+    "1167 Ocean Ave, Sea Bright, NJ 07760",
+    "275 Beachway Ave, Keansburg, NJ 07734",
+    "325 N Main St, Manville, NJ 08835",
+]

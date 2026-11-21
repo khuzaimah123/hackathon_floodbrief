@@ -17,6 +17,8 @@
   input { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:7px; font:inherit; }
   button { padding:9px 16px; border:0; border-radius:7px; background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
   button.secondary { background:#fff; color:var(--accent); border:1px solid var(--accent); }
+  .try { margin:10px 2px 0; font-size:13px; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .try button { padding:4px 10px; font-size:13px; font-weight:500; }
   #status { margin:14px 2px; color:var(--muted); min-height:1.5em; }
   .error { color:var(--warn) !important; }
   .page { background:#fff; border:1px solid var(--line); border-radius:10px; padding:30px 34px; display:none; }
@@ -66,6 +68,7 @@
       <div><label for="hearing">Hearing (optional)</label><input id="hearing" placeholder="e.g. Zoning Board, Dec 9"></div>
       <button type="submit">Build brief</button>
     </form>
+    <div id="try" class="try" hidden></div>
     <div id="status"></div>
   </div>
 
@@ -94,6 +97,21 @@ $("f").addEventListener("submit", async (e) => {
     $("status").className = "error"; $("status").textContent = err.message;
   }
 });
+
+// "Try:" buttons send the exact strings in config.DEMO_ADDRESSES, so they always hit the cache.
+fetch("/api/demo-addresses").then(r => r.json()).then(list => {
+  if (!list.length) return;
+  const box = $("try");
+  box.innerHTML = "Try:";
+  for (const a of list) {
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "secondary"; btn.title = a;
+    btn.textContent = a.split(",")[1]?.trim() || a;  // town name
+    btn.onclick = () => { $("address").value = a; $("f").requestSubmit(); };
+    box.appendChild(btn);
+  }
+  box.hidden = false;
+}).catch(() => {});
 
 function bar(x, warm) {
   return `<div class="bar ${warm ? "warm" : ""}"><span style="width:${Math.min(100, x * 100)}%"></span></div>`;

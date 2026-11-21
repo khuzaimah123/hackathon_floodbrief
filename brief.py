@@ -3,6 +3,9 @@ Turns raw data into the brief: numbers, a headline, and questions for the develo
 Every number in the output is computed here in code (no AI guesses).
 """
 import datetime
+import json
+import os
+import time
 
 import config
 import risk
@@ -15,6 +18,35 @@ def pct(x):
 
 def one_in(p):
     return f"1 in {round(1 / p)}" if p > 0 else "—"
+
+
+def curve_path(station_id):
+    return os.path.join(config.CACHE_DIR, f"curve_{station_id}.json")
+
+
+def save_curve(station_id, curve):
+    """Keep the last good live curve so a later outage can reuse it."""
+    try:
+        os.makedirs(config.CACHE_DIR, exist_ok=True)
+        tmp = curve_path(station_id) + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump({"saved_at": time.strftime("%Y-%m-%d %H:%M"), "station": station_id,
+                       "curve": curve}, f)
+        os.replace(tmp, curve_path(station_id))
+    except OSError:
+        pass  # caching is best-effort; never break a live lookup over it
+
+
+def load_curve(station_id):
+    """The saved curve file for a station, or None if missing/unreadable."""
+    try:
+        with open(curve_path(station_id)) as f:
+            saved = json.load(f)
+        if len(saved["curve"]) >= 5:
+            return saved
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
 
 
 def fetch_site(address):
@@ -41,9 +73,16 @@ def fetch_site(address):
     sid, gauge, miles = sources.nearest_gauge(lat, lon)
     site["gauge"] = {"id": sid, "name": gauge["name"], "miles": round(miles, 1)}
     curve = attempt("NOAA gauge curve", sources.gauge_curve, sid)
-    if curve is None and sid == "8531680":
-        curve = config.SANDY_HOOK_CURVE
-        warnings.append("Using saved Sandy Hook curve.")
+    if curve is not None:
+        save_curve(sid, curve)
+    else:
+        saved = load_curve(sid)
+        if saved:
+            curve = saved["curve"]
+            warnings.append(f"Using {gauge['name']} curve saved {saved['saved_at']}.")
+        elif sid == "8531680":
+            curve = config.SANDY_HOOK_CURVE
+            warnings.append("Using saved Sandy Hook curve.")
     site["gauge"]["curve"] = curve
     site["warnings"] = warnings
     return site
