@@ -94,7 +94,7 @@ explained in a legend at the top of the page:
 
 AI (Google Gemini) is used for one optional job: writing a three-sentence plain-language summary
 of the finished brief, with an optional Spanish translation for residents and board members who
-prefer it. Claude Code (Opus 5.5) was also incorporated in some areas within the production of this website.
+prefer it.
 
 Because a wrong number in a public hearing would undermine the whole tool, the summary passes a
 strict check before anyone sees it:
@@ -144,3 +144,5 @@ To enable AI summaries locally, put `GEMINI_API_KEY=...` in a `.env` file in thi
 - A map of the parcel showing today's flood zone and a 2050 water line
 - Briefs for every project on an upcoming board meeting agenda
 - A resident version that helps people write a public comment
+
+(Claude Code (Opus 5.5) was incorporated in some areas within the production of this website)
