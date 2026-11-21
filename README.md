@@ -52,7 +52,7 @@ at the top of the brief:
 | Label | Marker | Meaning | Examples |
 |---|---|---|---|
 | **Measured** | green circle | Taken directly from FEMA, USGS or NOAA data, not calculated by this tool | ground elevation, base flood elevation, today's 100-year rainfall depth, distance to the tide gauge |
-| **Modeled** | blue triangle | Calculated by this tool (`risk.py`, `brief.py`) | every flood chance (26%, 35%), "1 in 53 per year", "53-year flood", future rainfall depth and return period |
+| **Modeled** | charcoal triangle | Calculated by this tool (`risk.py`, `brief.py`) | every flood chance (26%, 35%), "1 in 53 per year", "53-year flood", future rainfall depth and return period |
 | **Assumed** | orange diamond | A chosen time span, floor height, scenario or standard definition | the 30-year span and 2026–2055, floor heights, sea-level-rise scenarios, NJDEP's rainfall factor, "100-year flood = 1% per year" |
 
 In code, numbers in sentences are written as `[[26%|modeled]]` (`brief.tag()`); the page turns

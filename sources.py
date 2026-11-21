@@ -1,6 +1,7 @@
 """
 Live data fetchers. Each function returns plain Python data or raises SourceError.
 """
+import contextvars
 import math
 import re
 
@@ -13,8 +14,14 @@ class SourceError(Exception):
     pass
 
 
+# Set by brief.fetch_site(quick=True) when a saved copy exists: one short try per request.
+QUICK = contextvars.ContextVar("quick_lookup", default=False)
+
+
 def _get(url, params, timeout=None, retries=0):
     """GET with optional retries on timeouts, connection errors and 5xx server errors."""
+    if QUICK.get():  # a saved copy can fill in, so don't make the user wait
+        timeout, retries = config.QUICK_TIMEOUT, 0
     for attempt in range(retries + 1):
         try:
             r = requests.get(url, params=params, timeout=timeout or config.HTTP_TIMEOUT)

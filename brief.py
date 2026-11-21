@@ -75,8 +75,17 @@ def load_curve(station_id):
     return None
 
 
-def fetch_site(address):
-    """Call every data source. Geocoding is required; the rest degrade gracefully."""
+def fetch_site(address, quick=False):
+    """Call every data source. Geocoding is required; the rest degrade gracefully.
+    quick=True: one short try per source (a saved copy exists to fill in anything slow)."""
+    token = sources.QUICK.set(quick)
+    try:
+        return _fetch_site(address)
+    finally:
+        sources.QUICK.reset(token)
+
+
+def _fetch_site(address):
     warnings = []
     site = sources.geocode(address)
     lat, lon = site["lat"], site["lon"]

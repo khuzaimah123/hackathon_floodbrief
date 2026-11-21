@@ -89,6 +89,10 @@ HTTP_TIMEOUT = 20  # seconds; FEMA can be slow
 # smoke test). A stalled request rarely recovers, so retry with a shorter timeout instead.
 USGS_TIMEOUT = 8   # seconds per try
 USGS_RETRIES = 2   # extra tries after the first (3 total, worst case ~24 s)
+# When an address already has saved data, don't make the user wait for a stalled source
+# (FEMA/NOAA can hang up to HTTP_TIMEOUT, USGS ~24 s with retries): every source gets one
+# short try, and anything that fails is filled in from the saved copy.
+QUICK_TIMEOUT = 5  # seconds, single try
 
 # Saved lookups and gauge curves (committed to git so the demo works offline).
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")

@@ -22,7 +22,7 @@ def main():
     for address in config.DEMO_ADDRESSES:
         t = time.time()
         try:
-            site = app.load_site(address)
+            site = app.load_site(address, quick_if_saved=False)  # full retries: really refresh
             b = brief.build_brief(site)
         except Exception as e:  # report every failure, keep going
             rows.append([address, "FAIL", f"{time.time() - t:.1f}s", "", "", "", "", "", ""])

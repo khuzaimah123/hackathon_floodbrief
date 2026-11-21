@@ -74,14 +74,16 @@ def from_cache(saved):
     return site
 
 
-def load_site(address):
+def load_site(address, quick_if_saved=True):
+    """Live lookup, falling back to / refreshing the saved copy. With a saved copy on hand,
+    slow sources get a short try (quick_if_saved); warm_cache.py turns that off."""
     if os.environ.get("SAMPLE") == "1":
         with open(os.path.join(HERE, "sample_site.json")) as f:
             return json.load(f)
     path = cache_path(address)
     saved = read_json(path)
     try:
-        site = brief.fetch_site(address)
+        site = brief.fetch_site(address, quick=bool(saved) and quick_if_saved)
     except sources.SourceError:
         if saved:
             return from_cache(saved)

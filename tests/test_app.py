@@ -48,7 +48,7 @@ def fake_site(warnings, fema=True, ground=True):
 # ---------------------------------------------------------------------------
 def test_partial_lookup_is_cached(cache_dir, monkeypatch):
     monkeypatch.setattr(brief, "fetch_site",
-                        lambda a: fake_site(["NOAA rainfall unavailable: timeout"]))
+                        lambda a, **kw: fake_site(["NOAA rainfall unavailable: timeout"]))
     site = app.load_site(ADDRESS)
     assert site["warnings"] == ["NOAA rainfall unavailable: timeout"]
     saved = app.read_json(app.cache_path(ADDRESS))
@@ -56,24 +56,54 @@ def test_partial_lookup_is_cached(cache_dir, monkeypatch):
 
 
 def test_lookup_missing_fema_is_not_cached(cache_dir, monkeypatch):
-    monkeypatch.setattr(brief, "fetch_site", lambda a: fake_site(["FEMA down"], fema=False))
+    monkeypatch.setattr(brief, "fetch_site", lambda a, **kw: fake_site(["FEMA down"], fema=False))
     app.load_site(ADDRESS)
     assert not os.path.exists(app.cache_path(ADDRESS))
 
 
 def test_cached_copy_used_when_live_fails_or_is_worse(cache_dir, monkeypatch):
-    monkeypatch.setattr(brief, "fetch_site", lambda a: fake_site([]))
+    monkeypatch.setattr(brief, "fetch_site", lambda a, **kw: fake_site([]))
     app.load_site(ADDRESS)  # clean lookup saved
 
-    def down(a):
+    def down(a, **kw):
         raise sources.SourceError("no internet")
     monkeypatch.setattr(brief, "fetch_site", down)
     site = app.load_site(ADDRESS)
     assert site["warnings"][-1].startswith("Using data saved ")
 
-    monkeypatch.setattr(brief, "fetch_site", lambda a: fake_site(["NOAA gauge curve unavailable"]))
+    monkeypatch.setattr(brief, "fetch_site", lambda a, **kw: fake_site(["NOAA gauge curve unavailable"]))
     site = app.load_site(ADDRESS)
     assert site["warnings"][-1].startswith("Using data saved ")
+
+
+def test_quick_usgs_only_when_saved_copy_exists(cache_dir, monkeypatch):
+    calls = []
+    monkeypatch.setattr(brief, "fetch_site", lambda a, quick=False: calls.append(quick) or fake_site([]))
+    app.load_site(ADDRESS)                        # nothing saved yet -> full retries
+    app.load_site(ADDRESS)                        # saved copy exists -> quick
+    app.load_site(ADDRESS, quick_if_saved=False)  # warm_cache.py -> full retries
+    assert calls == [False, True, False]
+
+
+def test_quick_mode_gives_every_source_one_short_try(monkeypatch):
+    import requests
+    seen = []
+
+    def fake_get(url, params=None, timeout=None):
+        seen.append(timeout)
+        raise requests.Timeout("stalled")
+    monkeypatch.setattr(requests, "get", fake_get)
+    token = sources.QUICK.set(True)
+    try:
+        with pytest.raises(sources.SourceError):
+            sources.ground_elevation(40.35, -73.97)  # normally 3 tries x 8 s
+    finally:
+        sources.QUICK.reset(token)
+    assert seen == [config.QUICK_TIMEOUT]
+    seen.clear()
+    with pytest.raises(sources.SourceError):
+        sources.ground_elevation(40.35, -73.97)  # not quick: full retries
+    assert seen == [config.USGS_TIMEOUT] * (config.USGS_RETRIES + 1)
 
 
 def test_cache_key_ignores_case_punctuation_and_spaces():
