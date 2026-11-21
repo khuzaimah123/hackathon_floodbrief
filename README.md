@@ -1,104 +1,146 @@
 # Flood Brief
 
-A one-page, independent flood briefing for a volunteer planning or zoning board member.
-Type in the address of a proposed development and get the flood risk today and under
-projected sea-level rise, plus questions to ask the developer at the hearing.
+**A one-page flood briefing for the volunteers who approve buildings on the Jersey Shore.**
 
-## Mac setup
+Type in the address of a proposed development. In seconds, Flood Brief produces a printable
+brief showing the site's flood risk today, how that risk grows as the sea rises, and the
+questions a board member should ask the developer at the hearing.
 
-```bash
-python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-```
+---
 
-(Port 5000 is taken by AirPlay Receiver on macOS, so the app uses 5050.)
+## The problem
 
-## Run it
+In New Jersey, local planning and zoning boards decide whether new buildings in flood zones
+get approved. Most board members are unpaid volunteers, not engineers. The developer arrives
+with paid consultants and a thick technical report; the board member usually has nothing
+independent to check it against.
 
-```bash
-pip install -r requirements.txt
-python3 app.py            # live data -> http://localhost:5050
-SAMPLE=1 python3 app.py   # built-in sample site, no internet needed
-python3 -m pytest tests   # tests for the math
-```
+The main public reference, FEMA's flood map, is based on past floods. It does not include
+projected sea-level rise. But a building approved today will still be standing in 2075, facing
+a higher ocean. So towns make 50-year decisions with a picture of risk that is already out of
+date.
 
-(On Windows PowerShell, use `$env:SAMPLE=1; python app.py`.)
+## Who it's for
+
+A volunteer zoning or planning board member who has a hearing coming up and needs a clear,
+independent read on one site's flood risk, in plain language, on one page.
+
+## What the brief shows
+
+| Section | What the board member learns |
+|---|---|
+| **Bottom line** | The chance of at least one major flood over a 30-year mortgage, on today's map and with sea-level rise |
+| **Today** | FEMA flood zone, base flood elevation, ground elevation, and how far below the flood level the site sits |
+| **Future odds** | Low, central and high sea-level-rise scenarios, side by side |
+| **Raising the floor** | How much safer the building gets if its lowest floor is built 1, 2 or 3 feet higher |
+| **Heavy rain** | Today's 100-year rainstorm and how much heavier it is projected to get in that county |
+| **Questions to ask** | Specific questions for the developer, generated from the site's data |
+
+### Example: a coastal site near Sandy Hook
+
+| Situation | Chance of at least one major flood in 30 years |
+|---|---|
+| Today's FEMA map | 26% |
+| With projected sea-level rise (central) | 35% |
+| Lowest floor built 2 ft higher | 8% |
+
+The last row is the point: it turns a worrying number into a decision the board can act on.
+
+---
 
 ## How it works
 
-| Step | Source | File |
-|---|---|---|
-| Address -> coordinates + county | U.S. Census Geocoder | `sources.geocode` |
-| Flood zone + base flood elevation (BFE) | FEMA National Flood Hazard Layer | `sources.fema_zone` |
-| Ground elevation | USGS 3DEP point query | `sources.ground_elevation` |
-| 100-year 24-hr rainfall | NOAA Atlas 14 | `sources.atlas14_24hr` |
-| Flood-frequency curve | NOAA CO-OPS Extreme Water Levels (nearest NJ gauge) | `sources.gauge_curve` |
-| Sea-level rise | Rutgers NJ STAP 2025 (0.9–1.7 ft by 2050, 2.2–3.8 ft by 2100 vs. 2005) | `config.py` |
-| Future rainfall factors | NJDEP stormwater rule, by county | `config.py` |
+### 1. Data (all public)
 
-**The core math (`risk.py`):**
-1. FEMA's BFE has a 1% chance per year today. That is the anchor.
-2. Sea-level rise of *s* ft makes that fixed height act like a height *s* ft lower on NOAA's
-   gauge curve, so its yearly chance goes up. This is computed separately for each year.
-3. P(at least one flood) = 1 − (1 − p₁)(1 − p₂)…(1 − pₙ).
-4. A floor built *f* ft above the BFE sits *f* ft higher on the curve, so its odds drop.
+| What | Source |
+|---|---|
+| Address to map coordinates and county | U.S. Census Geocoder |
+| Flood zone and base flood elevation | FEMA National Flood Hazard Layer |
+| Ground elevation | USGS 3D Elevation Program |
+| 100-year, 24-hour rainfall | NOAA Atlas 14 |
+| How often each water level occurs at the coast | NOAA tide gauges (nearest NJ station) |
+| Sea-level-rise projections | Rutgers NJ Science & Technical Advisory Panel, 2025 (0.9–1.7 ft by 2050; 2.2–3.8 ft by 2100, vs. 2005) |
+| Future rainfall increase by county | NJDEP stormwater rules |
 
-No AI is used for numbers. Everything in the brief is computed in code.
+### 2. The math
 
-## Every number is labeled
+1. **Start with FEMA's definition.** The base flood elevation is the water level with a 1% chance
+   of being reached in any year.
+2. **Add sea-level rise.** As the sea rises, that same water level is reached more easily. Using
+   NOAA's tide-gauge records, the tool works out each future year's chance separately.
+3. **Combine the years.** The chance of at least one flood over the period is
+   **1 − (1 − p₁)(1 − p₂)…(1 − pₙ)**, where each p is one year's chance.
+4. **Test higher floors.** A floor built higher sits further up the same curve, so its chance of
+   flooding drops.
 
-Each number in the brief (and in the Gemini summary) carries a marker, explained in a legend
-at the top of the brief:
+All of this is in `risk.py` and `brief.py`, with automated tests for the math in `tests/`.
 
-| Label | Marker | Meaning | Examples |
+### 3. Every number is labeled
+
+So a reader always knows how much to trust a number, each one in the brief carries a marker,
+explained in a legend at the top of the page:
+
+| Marker | Label | Meaning | Examples |
 |---|---|---|---|
-| **Measured** | green circle | Taken directly from FEMA, USGS or NOAA data, not calculated by this tool | ground elevation, base flood elevation, today's 100-year rainfall depth, distance to the tide gauge |
-| **Modeled** | charcoal triangle | Calculated by this tool (`risk.py`, `brief.py`) | every flood chance (26%, 35%), "1 in 53 per year", "53-year flood", future rainfall depth and return period |
-| **Assumed** | orange diamond | A chosen time span, floor height, scenario or standard definition | the 30-year span and 2026–2055, floor heights, sea-level-rise scenarios, NJDEP's rainfall factor, "100-year flood = 1% per year" |
+| Green circle | **Measured** | Taken directly from FEMA, USGS or NOAA data | ground elevation, base flood elevation, today's 100-year rainfall |
+| Charcoal triangle | **Modeled** | Calculated by Flood Brief | every flood chance (26%, 35%), "1 in 53 per year", future rainfall |
+| Orange diamond | **Assumed** | A chosen time span, scenario, floor height or standard definition | the 30-year span, sea-level-rise scenarios, "100-year flood = 1% per year" |
 
-In code, numbers in sentences are written as `[[26%|modeled]]` (`brief.tag()`); the page turns
-these into markers. Not labeled, because they are names rather than quantities: the street
-address and ZIP, citations like "NOAA Atlas 14" and "N.J.A.C. 7:8", the probability formula,
-and the date/time in status messages. Gemini summaries must copy each number's label exactly,
-or they are discarded.
+---
 
-## Optional: Gemini summary + Spanish translation
+## How we incorporated Gemini 3.8 Flash
 
-Put `GEMINI_API_KEY=...` in a `.env` file in this folder (it is git-ignored), or export it.
-Each teammate should use their own free key from https://aistudio.google.com/apikey.
+**AI never calculates anything.** Every number is computed in code from public data.
 
-With no key (as on the public Vercel site), the app only shows summaries already saved in
-`cache/summary_*.json` (the demo addresses); other addresses show "Summary unavailable." and
-Gemini is never called. If there are no saved summaries either, the buttons are hidden.
+AI (Google Gemini) is used for one optional job: writing a three-sentence plain-language summary
+of the finished brief, with an optional Spanish translation for residents and board members who
+prefer it.
 
-- `summary.py` asks Gemini (model list in `config.GEMINI_MODELS`, falls back to the next model if
-  one is overloaded) for a 3-sentence summary of the brief JSON, and can translate it to Spanish.
-- **Number guardrail:** every number in the model's reply must appear in the brief JSON (after
-  rounding; probabilities may appear as percents). If any doesn't, the reply is discarded and the
-  page shows "Summary unavailable." Passing replies get a "numbers verified" badge.
-- Limits: small numbers like 1, 2, 3 appear all over the brief, so they always pass; numbers
-  written as words aren't checked (the prompt asks for digits).
-- Verified summaries are saved in `cache/summary_*.json`. `warm_cache.py` pre-saves them for the
-  demo addresses, so the demo doesn't depend on Gemini being up.
+Because a wrong number in a public hearing would undermine the whole tool, the summary passes a
+strict check before anyone sees it:
 
+- **Number check.** Every number in the AI's summary must match a number in the brief. If even one
+  doesn't, the summary is thrown out and the page shows "Summary unavailable."
+- **Labels must match.** The summary must keep each number's Measured / Modeled / Assumed label.
+- **Verified badge.** Summaries that pass are marked "numbers verified."
+- **Works without AI.** If the AI is unavailable, the brief is complete on its own. On the public
+  demo site, AI summaries are pre-generated and verified for the demo addresses only.
 
-## Suggested team split
+Known limit of the check: very small numbers (like 1, 2, 3) appear throughout the brief, so they
+always pass, and numbers written as words aren't checked (the AI is instructed to use digits).
 
-- **Data:** get live mode working on real addresses; pre-cache demo sites.
-- **Math/content:** own `risk.py` + `brief.py`; be ready to explain the formula and caveats to judges.
-- **Front end:** polish `public/index.html`; make sure Print -> PDF fits on one or two pages.
-- **Pitch:** 2-minute story (board member, hearing Tuesday, developer has a 200-page report).
+---
 
-## Known limits (say these before a judge does)
+## Limitations
 
-- Planning estimates, not engineering certifications.
-- Sea-level adjustment only applies to coastal sites (FEMA coastal/V zones, or low-lying sites
-  near a gauge). Inland sites get today's odds plus the rainfall projection.
-- Odds for floors above the BFE extend the gauge curve past its 1% end point (an estimate).
-- The NJDEP rainfall factors are for 2050–2099, upper likely range, moderate emissions.
-- "Central" sea-level rise is the midpoint of the STAP likely range; the report gives no median.
+We want to be clear about what this tool is and isn't.
 
-## Stretch ideas
+- **Planning estimates, not engineering certifications.** The brief helps a board ask better
+  questions. It doesn't replace a licensed engineer.
+- **Sea-level rise applies to coastal sites only.** Inland sites get today's flood odds plus the
+  rainfall projection.
+- **Floors above the flood level are an estimate.** NOAA's records stop at the 1%-per-year level,
+  so odds for higher floors extend the curve past its last data point.
+- **Rainfall factors are long-range.** NJDEP's factors cover 2050–2099 under moderate emissions.
+- **"Central" sea-level rise is our choice.** It's the midpoint of the Rutgers likely range, which
+  gives no single best estimate.
 
-- Map of the parcel with today's flood zone and a 2050 water line
-- Pull a board meeting agenda and generate briefs for every listed project
-- "Resident" mode that turns the brief into a public comment draft
+---
+
+## Run it locally
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python3 app.py            # live data at http://localhost:5050
+SAMPLE=1 python3 app.py   # sample site, no internet needed
+python3 -m pytest tests   # run the math tests
+```
+
+To enable AI summaries locally, put `GEMINI_API_KEY=...` in a `.env` file in this folder.
+
+## What's next
+
+- A map of the parcel showing today's flood zone and a 2050 water line
+- Briefs for every project on an upcoming board meeting agenda
+- A resident version that helps people write a public comment
