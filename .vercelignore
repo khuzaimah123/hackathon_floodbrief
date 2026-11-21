@@ -1,0 +1,8 @@
+# Never upload secrets or local-only files
+.env
+.env.*
+.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+tests/

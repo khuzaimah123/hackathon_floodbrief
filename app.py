@@ -27,8 +27,12 @@ try:  # GEMINI_API_KEY etc. from .env (never committed); real env vars win
 except ImportError:
     pass
 CACHE = config.CACHE_DIR
-os.makedirs(CACHE, exist_ok=True)
-app = Flask(__name__, static_folder="static")
+PUBLIC = os.path.join(HERE, "public")  # Vercel serves public/ from its CDN
+try:
+    os.makedirs(CACHE, exist_ok=True)
+except OSError:  # read-only filesystem (e.g. Vercel): use the committed cache as-is
+    pass
+app = Flask(__name__, static_folder=None)
 
 
 def cache_key(address):
@@ -87,14 +91,17 @@ def load_site(address):
         if len(site["warnings"]) > saved_count:  # live lookup is worse than what we have
             return from_cache(saved)
     if is_cacheable(site):
-        write_json(path, {"saved_at": time.strftime("%Y-%m-%d %H:%M"), "address": address,
-                          "warning_count": len(site["warnings"]), "site": site})
+        try:
+            write_json(path, {"saved_at": time.strftime("%Y-%m-%d %H:%M"), "address": address,
+                              "warning_count": len(site["warnings"]), "site": site})
+        except OSError:  # read-only filesystem (Vercel): serve the live result anyway
+            pass
     return site
 
 
 @app.get("/")
 def index():
-    return send_from_directory(app.static_folder, "index.html")
+    return send_from_directory(PUBLIC, "index.html")
 
 
 @app.get("/api/demo-addresses")

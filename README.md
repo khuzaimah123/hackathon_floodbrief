@@ -75,7 +75,7 @@ With no key, the summary buttons are hidden.
 
 - **Data:** get live mode working on real addresses; pre-cache demo sites.
 - **Math/content:** own `risk.py` + `brief.py`; be ready to explain the formula and caveats to judges.
-- **Front end:** polish `static/index.html`; make sure Print -> PDF fits on one or two pages.
+- **Front end:** polish `public/index.html`; make sure Print -> PDF fits on one or two pages.
 - **Pitch:** 2-minute story (board member, hearing Tuesday, developer has a 200-page report).
 
 ## Known limits (say these before a judge does)
